@@ -44,6 +44,7 @@ import {
   getPreviewMetadataRows,
   getPreviewZoomAfterWheel
 } from './image-preview'
+import { getSessionRowView } from './session-list'
 import { getThemeToggleView } from './theme-toggle'
 import { getWorkspaceRunGridSlots } from './workspace-placeholders'
 import { getWorkspaceResultSummarySegments } from './workspace-summary'
@@ -196,7 +197,16 @@ function MainLayout({
 }
 
 function Sidebar(): JSX.Element {
-  const { conversations, activeConversationId, darkMode, loading, setActiveConversation, deleteConversation, toggleTheme } = useAppStore()
+  const {
+    conversations,
+    activeConversationId,
+    darkMode,
+    loading,
+    generatingByConversation,
+    setActiveConversation,
+    deleteConversation,
+    toggleTheme
+  } = useAppStore()
   const themeToggle = getThemeToggleView(darkMode)
   return (
     <aside className="sidebar">
@@ -205,29 +215,35 @@ function Sidebar(): JSX.Element {
         {loading ? <Loader2 className="spin" size={15} /> : null}
       </div>
       <div className="session-list">
-        {conversations.map((conversation) => (
-          <button
-            key={conversation.id}
-            className={`session ${conversation.id === activeConversationId ? 'active' : ''}`}
-            onClick={() => void setActiveConversation(conversation.id)}
-          >
-            <div className="session-line">
-              <span className="draft session-draft" title={conversation.draftPrompt || conversation.title}>
-                {conversation.draftPrompt || conversation.title}
-              </span>
-              <span
-                className="icon-only danger session-delete"
-                title="删除会话"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void deleteConversation(conversation.id)
-                }}
-              >
-                <Trash2 size={13} />
-              </span>
-            </div>
-          </button>
-        ))}
+        {conversations.map((conversation) => {
+          const row = getSessionRowView(conversation.id, activeConversationId, generatingByConversation)
+          return (
+            <button
+              key={conversation.id}
+              className={row.className}
+              onClick={() => void setActiveConversation(conversation.id)}
+            >
+              <div className="session-line">
+                <span className="draft session-draft" title={conversation.draftPrompt || conversation.title}>
+                  {conversation.draftPrompt || conversation.title}
+                </span>
+                <span className="session-loading-slot">
+                  {row.generating ? <Loader2 className="session-loading spin" size={13} aria-label="生成中" /> : null}
+                </span>
+                <span
+                  className="icon-only danger session-delete"
+                  title="删除会话"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void deleteConversation(conversation.id)
+                  }}
+                >
+                  <Trash2 size={13} />
+                </span>
+              </div>
+            </button>
+          )
+        })}
       </div>
       <div className="app-footer">
         <div className="version-line">

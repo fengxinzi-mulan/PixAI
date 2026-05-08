@@ -73,11 +73,11 @@ export class ImageService {
       let canceledCount = 0
       await Promise.all(
         requestControllers.map(async ({ controller }, requestIndex) => {
-          const durationMs = completedDurationMs(startedAtMs)
           try {
             const imageData = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, controller.signal)
             const image = imageData[0]
             if (!image) {
+              const durationMs = elapsedMs(startedAtMs)
               const item = this.createFailureItem(input, run, model, 'The image API returned no images.', 'empty-data', {
                 endpoint,
                 requestIndex
@@ -88,6 +88,7 @@ export class ImageService {
 
             const id = randomUUID()
             const filePath = await this.saveImage(id, image)
+            const durationMs = elapsedMs(startedAtMs)
             succeededCount += 1
             const item = this.database.insertHistory({
               id,
@@ -115,6 +116,7 @@ export class ImageService {
               return null
             }
 
+            const durationMs = elapsedMs(startedAtMs)
             if (error instanceof ImageHttpError) {
               const item = this.createFailureItem(input, run, model, error.message, 'http', {
                 ...error.details,
@@ -326,10 +328,6 @@ function serializeError(error: unknown): Record<string, unknown> {
     }
   }
   return { value: String(error) }
-}
-
-function completedDurationMs(startedAtMs: number): number {
-  return Math.max(1000, elapsedMs(startedAtMs))
 }
 
 class ImageHttpError extends Error {

@@ -302,7 +302,7 @@ button:disabled {
 
 .session-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 16px 24px;
   align-items: center;
   gap: 6px;
   width: 100%;
@@ -322,6 +322,26 @@ button:disabled {
 .session-delete {
   flex: 0 0 auto;
   justify-self: end;
+}
+
+.session-loading-slot {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  color: #2b8b6b;
+}
+
+.dark .session-loading-slot {
+  color: #8ce0bd;
+}
+
+.session.generating:not(.active) {
+  background: rgba(223, 246, 238, 0.48);
+}
+
+.dark .session.generating:not(.active) {
+  background: rgba(29, 59, 50, 0.34);
 }
 
 .pill {

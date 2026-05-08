@@ -1,0 +1,1705 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>绘境 Studio - AI 绘画 APP 主界面原型</title>
+  <style>
+    :root {
+      --bg: #f5f8f6;
+      --paper: #ffffff;
+      --paper-soft: #fbfdfb;
+      --ink: #17211d;
+      --muted: #6b7771;
+      --line: #dce7df;
+      --mint: #60c7a1;
+      --mint-dark: #279b76;
+      --aqua: #dff6ee;
+      --blue: #6697e8;
+      --peach: #ff9f80;
+      --rose: #ef6f78;
+      --amber: #f4be57;
+      --shadow: 0 18px 48px rgba(32, 63, 48, .12);
+      --radius: 8px;
+      font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 6% 7%, rgba(96, 199, 161, .24), transparent 28%),
+        linear-gradient(135deg, #f7faf8 0%, #eef7f3 54%, #f9f3ee 100%);
+      color: var(--ink);
+    }
+
+    body.dark {
+      --paper: #151d1a;
+      --paper-soft: #1b2521;
+      --ink: #edf6f1;
+      --muted: #9baaa3;
+      --line: #2b3a34;
+      --aqua: #1d3b32;
+      --shadow: 0 18px 48px rgba(0, 0, 0, .34);
+      background:
+        radial-gradient(circle at 6% 7%, rgba(96, 199, 161, .14), transparent 28%),
+        linear-gradient(135deg, #0f1714 0%, #131d19 54%, #1b1917 100%);
+    }
+
+    .shell {
+      width: 1440px;
+      height: 1040px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.78);
+      border-radius: 22px;
+      background: rgba(255,255,255,.74);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    body.dark .app {
+      border-color: rgba(255,255,255,.08);
+      background: rgba(18, 27, 23, .82);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+    }
+
+    body.dark .topbar {
+      background: rgba(18, 27, 23, .8);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 270px;
+    }
+
+    .logo {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7ee3bc, #82a8ff);
+      color: white;
+      font-weight: 800;
+      box-shadow: 0 9px 24px rgba(79, 168, 138, .28);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .endpoint {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 420px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper-soft);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 5px rgba(96, 199, 161, .16);
+    }
+
+    .endpoint code {
+      color: #2c3a34;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 12px;
+    }
+
+    body.dark .endpoint code {
+      color: #dbe8e1;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    button, .button {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: white;
+      color: #26332e;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    body.dark button,
+    body.dark .button {
+      background: #1b2521;
+      color: #edf6f1;
+    }
+
+    .primary {
+      border-color: transparent;
+      background: #1e9f78;
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(39, 155, 118, .22);
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 244px 1fr 318px;
+      min-height: 0;
+    }
+
+    .main.settings-hidden {
+      grid-template-columns: 244px minmax(0, 1fr);
+    }
+
+    .main.settings-hidden .inspector {
+      display: none;
+    }
+
+    .main.gallery-mode .workspace,
+    .main.gallery-mode .inspector {
+      display: none;
+    }
+
+    .main.gallery-mode .gallery-page {
+      display: grid;
+    }
+
+    .sidebar, .inspector {
+      min-height: 0;
+      padding: 16px;
+      background: rgba(251,253,251,.82);
+    }
+
+    body.dark .sidebar,
+    body.dark .inspector {
+      background: rgba(21, 29, 26, .88);
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+    }
+
+    .inspector {
+      border-left: 1px solid var(--line);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: #2d3934;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    .session-list {
+      display: grid;
+      gap: 8px;
+      flex: 1;
+      align-content: start;
+      overflow: auto;
+    }
+
+    .app-footer {
+      display: grid;
+      gap: 10px;
+      padding-top: 14px;
+      margin-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .version-line,
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .theme-toggle {
+      height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.62);
+      cursor: pointer;
+    }
+
+    body.dark .theme-toggle {
+      background: rgba(27, 37, 33, .8);
+    }
+
+    .session {
+      padding: 11px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: transparent;
+      cursor: pointer;
+      transition: background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+
+    .session.active {
+      border-color: #b7e8d6;
+      background: #effbf6;
+    }
+
+    body.dark .session.active {
+      border-color: #2b7e63;
+      background: #17342b;
+    }
+
+    .session:hover {
+      border-color: #cfe5da;
+      transform: translateY(-1px);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: #eef3f0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .pill.good { background: var(--aqua); color: #25815f; }
+    .pill.warn { background: #fff3dd; color: #95661c; }
+    .pill.fail { background: #ffe9ea; color: #b7424c; }
+    .pill.blue { background: #e9f0ff; color: #356ec8; }
+
+    body.dark .pill { background: #22302b; color: #aab8b2; }
+    body.dark .pill.good { background: #1d3b32; color: #8ce0bd; }
+    body.dark .pill.warn { background: #3d3320; color: #f3c86c; }
+    body.dark .pill.fail { background: #3b2227; color: #ffadb4; }
+    body.dark .pill.blue { background: #1e2d49; color: #a8c4ff; }
+
+    .draft {
+      display: -webkit-box;
+      min-height: 34px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.42;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .session-meta {
+      display: flex;
+      gap: 6px;
+      margin-top: 9px;
+      flex-wrap: wrap;
+    }
+
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 286px 1fr;
+      background: rgba(255,255,255,.58);
+    }
+
+    .gallery-page {
+      grid-column: 2 / -1;
+      min-width: 0;
+      min-height: 0;
+      display: none;
+      grid-template-rows: auto 1fr;
+      padding: 22px;
+      background: rgba(250,252,250,.92);
+    }
+
+    body.dark .workspace,
+    body.dark .gallery-page {
+      background: rgba(18, 27, 23, .66);
+    }
+
+    .gallery-hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .gallery-hero h2 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .gallery-hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .composer {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .composer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .composer-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .prompt-box {
+      display: grid;
+      grid-template-rows: 1fr 46px;
+      height: 166px;
+      border: 1px solid #cfe5da;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(43, 95, 70, .07);
+    }
+
+    body.dark .prompt-box,
+    body.dark .panel,
+    body.dark .history-card,
+    body.dark .input,
+    body.dark .select,
+    body.dark .search {
+      background: #17211d;
+    }
+
+    body.dark .input,
+    body.dark .select,
+    body.dark .search,
+    body.dark .toggle-row,
+    body.dark .section-title,
+    body.dark .panel h3 {
+      color: #edf6f1;
+    }
+
+    textarea {
+      resize: none;
+      width: 100%;
+      height: 100%;
+      padding: 16px 17px;
+      border: 0;
+      outline: 0;
+      border-radius: 12px 12px 0 0;
+      color: #202b27;
+      font: 500 15px/1.62 inherit;
+    }
+
+    body.dark textarea {
+      background: #17211d;
+      color: #edf6f1;
+    }
+
+    .prompt-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px 10px 14px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .mini-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-strip {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .canvas-area {
+      min-height: 0;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .art-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.72);
+      border-radius: 14px;
+      background: #eaf5ef;
+      box-shadow: 0 12px 25px rgba(32, 63, 48, .10);
+    }
+
+    .art-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255,255,255,.82) 0 9%, transparent 10%),
+        radial-gradient(circle at 66% 34%, rgba(255,255,255,.58) 0 7%, transparent 8%),
+        linear-gradient(135deg, rgba(96,199,161,.7), rgba(102,151,232,.55) 42%, rgba(255,159,128,.55));
+    }
+
+    .art-card:nth-child(2)::before {
+      background:
+        linear-gradient(140deg, rgba(28,91,82,.86), rgba(96,199,161,.58)),
+        repeating-linear-gradient(45deg, rgba(255,255,255,.28) 0 10px, transparent 10px 22px);
+    }
+
+    .art-card:nth-child(3)::before {
+      background:
+        radial-gradient(circle at 22% 70%, rgba(255,159,128,.82), transparent 20%),
+        radial-gradient(circle at 72% 24%, rgba(102,151,232,.72), transparent 21%),
+        linear-gradient(160deg, #f9fbf8, #caefe1);
+    }
+
+    .art-card.failed {
+      display: grid;
+      place-items: center;
+      background: #fff7f4;
+      box-shadow: none;
+    }
+
+    .art-card.failed::before {
+      background:
+        linear-gradient(135deg, rgba(255,159,128,.13), rgba(239,111,120,.12));
+    }
+
+    .art-label {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 1;
+    }
+
+    .art-tools {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      z-index: 1;
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid rgba(255,255,255,.65);
+      border-radius: 10px;
+      background: rgba(255,255,255,.72);
+      backdrop-filter: blur(10px);
+    }
+
+    .art-tools span {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: rgba(255,255,255,.9);
+      color: #31413a;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .art-card.loading::before {
+      background:
+        linear-gradient(100deg, #e9f5ef 0%, #f7fbf8 34%, #dff4ec 66%, #e9f5ef 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.1s infinite linear;
+    }
+
+    .art-card.loading::after {
+      content: "生成中...";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: #2b8b6b;
+      font-size: 13px;
+      font-weight: 900;
+      z-index: 1;
+    }
+
+    @keyframes shimmer {
+      to { background-position: -200% 0; }
+    }
+
+    .fail-content {
+      position: relative;
+      z-index: 1;
+      width: calc(100% - 34px);
+      padding: 14px;
+      border: 1px solid #ffd2d5;
+      border-radius: 10px;
+      background: rgba(255,255,255,.82);
+    }
+
+    .fail-content strong {
+      display: block;
+      margin-bottom: 7px;
+      color: #aa3b45;
+      font-size: 13px;
+    }
+
+    .fail-content code {
+      display: block;
+      padding: 9px;
+      border-radius: 8px;
+      background: #fff1f2;
+      color: #8d3440;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .fail-content.collapsed code {
+      display: none;
+    }
+
+    .history {
+      min-height: 0;
+      padding: 18px 0 0;
+      background: transparent;
+    }
+
+    .history-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 11px;
+    }
+
+    .history-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search {
+      width: 230px;
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      outline: 0;
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .history-card {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 10px;
+      min-height: 118px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      cursor: pointer;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+
+    .history-card:hover,
+    .history-card.selected {
+      border-color: #9ddfc8;
+      box-shadow: 0 10px 22px rgba(32, 63, 48, .08);
+      transform: translateY(-1px);
+    }
+
+    .thumb {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #a8ead3, #83aaf0 55%, #ffc1aa);
+    }
+
+    .thumb.fail {
+      background: linear-gradient(135deg, #fff0ed, #ffe1e5);
+    }
+
+    .thumb::after {
+      content: "";
+      position: absolute;
+      inset: 16px 12px;
+      border-radius: 999px 999px 18px 18px;
+      background: rgba(255,255,255,.45);
+    }
+
+    .history-info {
+      min-width: 0;
+    }
+
+    .history-info strong {
+      display: block;
+      overflow: hidden;
+      margin-bottom: 5px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+
+    .history-info p {
+      display: -webkit-box;
+      overflow: hidden;
+      margin: 0 0 9px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.38;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .tiny {
+      height: 23px;
+      padding: 0 7px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .config-stack {
+      display: grid;
+      gap: 13px;
+    }
+
+    .panel {
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .panel h3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 11px;
+      font-size: 13px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .input, .select {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fbfdfb;
+      color: #27352f;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .input code {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #f5f8f6;
+    }
+
+    .segmented span {
+      display: grid;
+      place-items: center;
+      height: 28px;
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .segmented .on {
+      background: #fff;
+      color: #1d7f61;
+      box-shadow: 0 3px 10px rgba(38, 84, 64, .08);
+    }
+
+    .count-row {
+      display: grid;
+      grid-template-columns: 1fr 82px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .slider {
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--mint) 0 60%, #e6eee9 60% 100%);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-top: 1px solid #edf3ef;
+      color: #2d3934;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .switch {
+      width: 38px;
+      height: 22px;
+      padding: 3px;
+      border-radius: 999px;
+      background: #dce8e1;
+      cursor: pointer;
+    }
+
+    .switch::after {
+      content: "";
+      display: block;
+      width: 16px;
+      height: 16px;
+      margin-left: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 5px rgba(35,55,46,.22);
+      transition: margin .18s ease;
+    }
+
+    .switch.off::after {
+      margin-left: 0;
+    }
+
+    .switch.off {
+      background: #d7ded9;
+    }
+
+    .danger-link {
+      color: #bb4b55;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      background: rgba(23, 33, 29, .42);
+      z-index: 20;
+    }
+
+    .modal.open {
+      display: flex;
+    }
+
+    .modal-panel {
+      width: min(820px, 92vw);
+      height: min(760px, 84vh);
+      display: grid;
+      grid-template-rows: 48px 1fr 54px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.72);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 28px 80px rgba(20, 35, 29, .28);
+    }
+
+    .modal-head,
+    .modal-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .modal-foot {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .modal-art {
+      display: grid;
+      place-items: center;
+      overflow: auto;
+      background: #f5faf7;
+    }
+
+    .modal-swatch {
+      width: 420px;
+      height: 420px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #9ee8d2, #9ab8f8 56%, #ffc0a7);
+      box-shadow: 0 18px 42px rgba(32, 63, 48, .18);
+      transform: scale(var(--zoom, 1));
+      transition: transform .18s ease;
+    }
+
+    .toast {
+      position: fixed;
+      right: 28px;
+      bottom: 28px;
+      display: none;
+      padding: 11px 14px;
+      border: 1px solid #b7e8d6;
+      border-radius: 9px;
+      background: #effbf6;
+      color: #23755a;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: 0 14px 34px rgba(32,63,48,.16);
+      z-index: 30;
+    }
+
+    .toast.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">绘</div>
+          <div>
+            <h1>绘境 Studio</h1>
+            <span>AI 绘画工作台 · 多会话生成</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <i class="dot"></i>
+          <span>当前调用</span>
+          <code data-endpoint>${baseURL}/v1/images/generations</code>
+          <span class="pill good" data-connect-status>已连接</span>
+        </div>
+        <div class="top-actions">
+          <button data-action="toggle-settings" data-settings-toggle>⌘ 设置</button>
+          <button data-action="open-gallery" data-gallery-toggle>▦ 图库</button>
+          <button class="primary" data-action="new-session">＋ 新建会话</button>
+        </div>
+      </header>
+
+      <main class="main" data-main>
+        <aside class="sidebar">
+          <div class="section-title">
+            <span>会话</span>
+            <button class="icon-btn" data-action="new-session">＋</button>
+          </div>
+          <div class="session-list">
+            <div class="session active" data-session="greenhouse">
+              <span class="pill good">生成中</span>
+              <div class="draft">一座玻璃温室，清晨薄雾、柔和逆光、浅绿色植物和水珠质感...</div>
+              <div class="session-meta">
+                <span class="pill">gpt-image-2</span>
+                <span class="pill">1:1</span>
+                <span class="pill">4 张</span>
+              </div>
+            </div>
+            <div class="session" data-session="poster">
+              <span class="pill blue">草稿</span>
+              <div class="draft">清爽护肤品静物摄影，玻璃瓶、柑橘切片、透明水纹...</div>
+              <div class="session-meta">
+                <span class="pill">4:3</span>
+                <span class="pill">高质量</span>
+              </div>
+            </div>
+            <div class="session" data-session="character">
+              <span class="pill fail">失败 1</span>
+              <div class="draft">小清新插画角色，雨后街角，浅蓝雨衣和透明雨伞...</div>
+              <div class="session-meta">
+                <span class="pill">已记录</span>
+              </div>
+            </div>
+            <div class="session" data-session="avatar">
+              <span class="pill warn">收藏</span>
+              <div class="draft">极简头像，柔和日光，干净背景，偏自然摄影...</div>
+              <div class="session-meta">
+                <span class="pill">2 张</span>
+                <span class="pill">medium</span>
+              </div>
+            </div>
+          </div>
+          <div class="app-footer">
+            <div class="version-line">
+              <span>版本</span>
+              <span>v0.1.0</span>
+            </div>
+            <button class="theme-toggle" data-action="toggle-theme">
+              <span data-theme-label>白天模式</span>
+              <span class="switch off" data-theme-switch></span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="workspace">
+          <div class="composer">
+            <div class="composer-head">
+              <div class="composer-tools">
+                <span class="pill good">文生图</span>
+                <span class="pill">自动保存草稿</span>
+              </div>
+              <div class="status-line">
+                <span class="pill good" data-saved-count>已保存 3</span>
+                <span class="pill fail" data-fail-count>失败 1</span>
+              </div>
+              <div class="composer-tools">
+                <button data-action="clear-prompt">清空</button>
+              </div>
+            </div>
+            <div class="prompt-box">
+              <textarea data-prompt>一座明亮的玻璃温室，清晨薄雾漂浮在植物之间，白色木桌上有透明花瓶和刚采下的香草，柔和逆光，浅绿色与奶白色，小清新、干净、自然摄影质感，细节丰富。</textarea>
+              <div class="prompt-foot">
+                <span class="hint">当前会话独立保存 prompt 草稿、模型、图片比例、质量和生成数量</span>
+                <div class="mini-controls">
+                  <button data-action="refill-current">参数回填</button>
+                  <button class="primary" data-action="generate">生成图片</button>
+                </div>
+              </div>
+            </div>
+            <div class="tool-strip">
+              <span class="pill good">默认模型 gpt-image-2</span>
+              <span class="pill" data-quality-pill>质量 high</span>
+              <span class="pill" data-count-pill>数量 4</span>
+            </div>
+          </div>
+
+          <div class="canvas-area">
+            <div class="preview-grid">
+              <article class="art-card">
+                <div class="art-label"><span class="pill good">完成</span><span class="pill">#A1</span></div>
+                <div class="art-tools"><span data-tool="preview" title="预览">⌕</span><span data-tool="zoom" title="缩放">＋</span><span data-tool="copy" title="复制">⧉</span><span data-tool="download" title="下载">↓</span></div>
+              </article>
+              <article class="art-card">
+                <div class="art-label"><span class="pill good">已收藏</span><span class="pill">#A2</span></div>
+                <div class="art-tools"><span data-tool="preview">⌕</span><span data-tool="zoom">＋</span><span data-tool="copy">⧉</span><span data-tool="download">↓</span></div>
+              </article>
+              <article class="art-card">
+                <div class="art-label"><span class="pill good">完成</span><span class="pill">#A3</span></div>
+                <div class="art-tools"><span data-tool="preview">⌕</span><span data-tool="zoom">＋</span><span data-tool="copy">⧉</span><span data-tool="download">↓</span></div>
+              </article>
+              <article class="art-card failed">
+                <div class="fail-content">
+                  <strong>生成失败 · 详情已展开</strong>
+                  <code>HTTP 429 rate_limit_exceeded
+request_id: img_7j2b...
+retry_after: 18s
+session: 晨雾花房</code>
+                </div>
+              </article>
+            </div>
+          </div>
+
+        </section>
+
+        <aside class="inspector">
+          <div class="config-stack">
+            <div class="panel">
+              <h3>服务配置 <span class="pill good">全局</span></h3>
+              <div class="field">
+                <label>baseURL</label>
+                <div class="input" data-action="edit-base-url"><code>https://api.example.com</code><span>编辑</span></div>
+              </div>
+              <div class="field">
+                <label>apiKey</label>
+                <div class="input" data-action="toggle-key"><code>sk-••••••••••••9xQ</code><span>显示</span></div>
+              </div>
+              <div class="field">
+                <label>默认模型</label>
+                <div class="select" data-action="cycle-default-model"><span>gpt-image-2</span><span>⌄</span></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>当前会话参数 <span class="pill">独立</span></h3>
+              <div class="field">
+                <label>模型</label>
+                <div class="select" data-action="cycle-session-model"><span>gpt-image-2</span><span>⌄</span></div>
+              </div>
+              <div class="field">
+                <label>图片比例</label>
+                <div class="segmented" data-param="ratio"><span class="on">1:1</span><span>4:3</span><span>16:9</span></div>
+              </div>
+              <div class="field">
+                <label>质量</label>
+                <div class="segmented" data-param="quality"><span>low</span><span>medium</span><span class="on">high</span></div>
+              </div>
+              <div class="field">
+                <label>生成数量</label>
+                <div class="count-row" data-action="cycle-count"><div class="slider"></div><div class="input" data-count-input>4 张</div></div>
+              </div>
+              <div class="toggle-row"><span>自动写入全局历史</span><span class="switch"></span></div>
+              <div class="toggle-row"><span>失败记录保留详情</span><span class="switch"></span></div>
+            </div>
+
+          </div>
+        </aside>
+
+        <section class="gallery-page">
+          <div class="gallery-hero">
+            <div>
+              <h2>图库</h2>
+              <p>查看所有会话生成记录，支持搜索、排序、收藏、删除和参数回填。</p>
+            </div>
+            <button data-action="close-gallery">返回工作台</button>
+          </div>
+          <div class="history">
+            <div class="history-head">
+              <div class="history-title">全局历史库 <span class="pill">跨会话共享</span></div>
+              <div class="filters">
+                <input class="search" data-history-search placeholder="搜索 prompt、模型、会话...">
+                <button data-action="sort-history">排序：最近</button>
+                <button data-action="filter-favorites">★ 只看收藏</button>
+                <button class="danger-link" data-action="delete-selected">删除所选</button>
+              </div>
+            </div>
+            <div class="history-grid">
+              <article class="history-card" data-favorite="true">
+                <div class="thumb"></div>
+                <div class="history-info">
+                  <strong>晨雾花房 · #A2</strong>
+                  <p>玻璃温室、清晨薄雾、柔和逆光、小清新摄影质感。</p>
+                  <div class="history-actions"><span class="pill tiny good">收藏</span><span class="pill tiny">回填参数</span><span class="pill tiny">下载</span></div>
+                </div>
+              </article>
+              <article class="history-card" data-favorite="false">
+                <div class="thumb"></div>
+                <div class="history-info">
+                  <strong>产品海报</strong>
+                  <p>清爽护肤品静物摄影，玻璃瓶、柑橘切片、透明水纹。</p>
+                  <div class="history-actions"><span class="pill tiny">预览</span><span class="pill tiny">复制</span><span class="pill tiny">删除</span></div>
+                </div>
+              </article>
+              <article class="history-card" data-favorite="false">
+                <div class="thumb fail"></div>
+                <div class="history-info">
+                  <strong>角色设定 · 失败</strong>
+                  <p>HTTP 500 upstream_error，错误详情保留，可重新填充参数后再试。</p>
+                  <div class="history-actions"><span class="pill tiny fail">错误</span><span class="pill tiny">展开详情</span><span class="pill tiny">回填</span></div>
+                </div>
+              </article>
+              <article class="history-card" data-favorite="true">
+                <div class="thumb"></div>
+                <div class="history-info">
+                  <strong>头像探索 · 收藏</strong>
+                  <p>自然光头像、干净背景、柔和色彩，高质量输出。</p>
+                  <div class="history-actions"><span class="pill tiny good">收藏</span><span class="pill tiny">排序置顶</span><span class="pill tiny">保存</span></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="modal" data-preview-modal>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <span data-modal-title>图片预览</span>
+        <button data-action="close-preview">关闭</button>
+      </div>
+      <div class="modal-art">
+        <div class="modal-swatch" data-modal-swatch></div>
+      </div>
+      <div class="modal-foot">
+        <span data-modal-meta>缩放 100%</span>
+        <div class="mini-controls">
+          <button data-action="zoom-out">－</button>
+          <button data-action="zoom-in">＋</button>
+          <button data-action="copy-preview">复制</button>
+          <button data-action="download-preview">下载</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" data-toast></div>
+  <script>
+    (() => {
+      const sessions = {
+        greenhouse: {
+          title: "晨雾花房",
+          prompt: "一座明亮的玻璃温室，清晨薄雾漂浮在植物之间，白色木桌上有透明花瓶和刚采下的香草，柔和逆光，浅绿色与奶白色，小清新、干净、自然摄影质感，细节丰富。",
+          model: "gpt-image-2",
+          ratio: "1:1",
+          quality: "high",
+          count: 4,
+          saved: 3,
+          failed: 1
+        },
+        poster: {
+          title: "产品海报",
+          prompt: "清爽护肤品静物摄影，玻璃瓶、柑橘切片、透明水纹，干净留白，适合电商首图。",
+          model: "gpt-image-2",
+          ratio: "4:3",
+          quality: "high",
+          count: 2,
+          saved: 0,
+          failed: 0
+        },
+        character: {
+          title: "角色设定",
+          prompt: "小清新插画角色，雨后街角，浅蓝雨衣和透明雨伞，表情温和，背景干净。",
+          model: "gpt-image-2",
+          ratio: "1:1",
+          quality: "medium",
+          count: 1,
+          saved: 0,
+          failed: 1
+        },
+        avatar: {
+          title: "头像探索",
+          prompt: "极简头像，柔和日光，干净背景，偏自然摄影，浅色服装，清爽可信赖。",
+          model: "gpt-image-2",
+          ratio: "1:1",
+          quality: "medium",
+          count: 2,
+          saved: 2,
+          failed: 0
+        }
+      };
+
+      const modelOptions = ["gpt-image-2", "gpt-image-2-fast", "gpt-image-2-hd"];
+      const state = {
+        active: "greenhouse",
+        historyFavoriteOnly: false,
+        historyAsc: false,
+        zoom: 1,
+        selectedHistory: null,
+        generatedIndex: 4,
+        apiKeyVisible: false,
+        settingsVisible: true,
+        darkMode: false
+      };
+
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+      const promptEl = $("[data-prompt]");
+      const toastEl = $("[data-toast]");
+      const modal = $("[data-preview-modal]");
+      const modalSwatch = $("[data-modal-swatch]");
+      const modalMeta = $("[data-modal-meta]");
+
+      function toast(message) {
+        toastEl.textContent = message;
+        toastEl.classList.add("show");
+        window.clearTimeout(toastEl._timer);
+        toastEl._timer = window.setTimeout(() => toastEl.classList.remove("show"), 1600);
+      }
+
+      function activeSession() {
+        return sessions[state.active];
+      }
+
+      function updateSegment(param, value) {
+        const group = $(`[data-param="${param}"]`);
+        if (!group) return;
+        $$("span", group).forEach((span) => {
+          span.classList.toggle("on", span.textContent.trim() === String(value));
+        });
+      }
+
+      function renderSession() {
+        const session = activeSession();
+        promptEl.value = session.prompt;
+        $("[data-saved-count]").textContent = `已保存 ${session.saved}`;
+        $("[data-fail-count]").textContent = `失败 ${session.failed}`;
+        $("[data-quality-pill]").textContent = `质量 ${session.quality}`;
+        $("[data-count-pill]").textContent = `数量 ${session.count}`;
+        $("[data-count-input]").textContent = `${session.count} 张`;
+        $("[data-action='cycle-session-model'] span:first-child").textContent = session.model;
+        updateSegment("ratio", session.ratio);
+        updateSegment("quality", session.quality);
+        $$(".session").forEach((item) => item.classList.toggle("active", item.dataset.session === state.active));
+      }
+
+      function updateSessionSummary(id) {
+        const card = $(`.session[data-session="${id}"]`);
+        const session = sessions[id];
+        if (!card || !session) return;
+        $(".draft", card).textContent = `${session.prompt.slice(0, 36)}...`;
+        const meta = $(".session-meta", card);
+        meta.innerHTML = `
+          <span class="pill">${session.model}</span>
+          <span class="pill">${session.ratio}</span>
+          <span class="pill">${session.count} 张</span>
+        `;
+      }
+
+      function setActiveSession(id) {
+        sessions[state.active].prompt = promptEl.value;
+        state.active = id;
+        renderSession();
+      }
+
+      function createSession() {
+        const id = `session-${Date.now()}`;
+        const count = Object.keys(sessions).length + 1;
+        sessions[id] = {
+          title: `新会话 ${count}`,
+          prompt: "输入新的绘画提示词...",
+          model: "gpt-image-2",
+          ratio: "1:1",
+          quality: "medium",
+          count: 1,
+          saved: 0,
+          failed: 0
+        };
+        const card = document.createElement("div");
+        card.className = "session";
+        card.dataset.session = id;
+        card.innerHTML = `
+          <span class="pill blue">草稿</span>
+          <div class="draft">${sessions[id].prompt}</div>
+          <div class="session-meta">
+            <span class="pill">gpt-image-2</span>
+            <span class="pill">1:1</span>
+            <span class="pill">1 张</span>
+          </div>
+        `;
+        $(".session-list").appendChild(card);
+        setActiveSession(id);
+        toast("已新建会话");
+      }
+
+      function clearPrompt() {
+        promptEl.value = "";
+        activeSession().prompt = "";
+        updateSessionSummary(state.active);
+        toast("已清空草稿");
+      }
+
+      function makeArtCard(index, loading = false) {
+        const card = document.createElement("article");
+        card.className = `art-card${loading ? " loading" : ""}`;
+        card.innerHTML = `
+          <div class="art-label"><span class="pill good">${loading ? "排队" : "完成"}</span><span class="pill">#A${index}</span></div>
+          <div class="art-tools"><span data-tool="preview">⌕</span><span data-tool="zoom">＋</span><span data-tool="copy">⧉</span><span data-tool="download">↓</span></div>
+        `;
+        return card;
+      }
+
+      function addHistoryItem(title, prompt, favorite = false) {
+        const card = document.createElement("article");
+        card.className = "history-card";
+        card.dataset.favorite = String(favorite);
+        card.innerHTML = `
+          <div class="thumb"></div>
+          <div class="history-info">
+            <strong>${title}</strong>
+            <p>${prompt}</p>
+            <div class="history-actions"><span class="pill tiny${favorite ? " good" : ""}">收藏</span><span class="pill tiny">回填参数</span><span class="pill tiny">下载</span></div>
+          </div>
+        `;
+        $(".history-grid").prepend(card);
+      }
+
+      function simulateGenerate() {
+        const session = activeSession();
+        session.prompt = promptEl.value.trim() || session.prompt;
+        updateSessionSummary(state.active);
+        const amount = Math.min(session.count, 4);
+        const grid = $(".preview-grid");
+        const loadingCards = [];
+        for (let i = 0; i < amount; i += 1) {
+          state.generatedIndex += 1;
+          const card = makeArtCard(state.generatedIndex, true);
+          grid.prepend(card);
+          loadingCards.push(card);
+        }
+        const button = $("[data-action='generate']");
+        button.textContent = "生成中...";
+        button.disabled = true;
+        toast("已提交生成任务");
+        window.setTimeout(() => {
+          loadingCards.forEach((card) => {
+            card.classList.remove("loading");
+            $(".art-label .pill", card).textContent = "完成";
+          });
+          session.saved += amount;
+          button.textContent = "生成图片";
+          button.disabled = false;
+          renderSession();
+          addHistoryItem(`${session.title} · #A${state.generatedIndex}`, session.prompt, false);
+          toast("生成完成，已加入历史");
+        }, 900);
+      }
+
+      function openPreview(sourceCard) {
+        const title = $(".art-label", sourceCard)?.innerText.replace(/\s+/g, " ") || "图片预览";
+        $("[data-modal-title]").textContent = title;
+        state.zoom = 1;
+        modalSwatch.style.setProperty("--zoom", state.zoom);
+        modalMeta.textContent = "缩放 100%";
+        modal.classList.add("open");
+      }
+
+      function setZoom(delta) {
+        state.zoom = Math.max(.5, Math.min(2.5, +(state.zoom + delta).toFixed(2)));
+        modalSwatch.style.setProperty("--zoom", state.zoom);
+        modalMeta.textContent = `缩放 ${Math.round(state.zoom * 100)}%`;
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(() => toast("已复制到剪贴板")).catch(() => toast("浏览器限制了剪贴板"));
+        } else {
+          toast("当前浏览器不支持剪贴板");
+        }
+      }
+
+      function downloadPlaceholder() {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9ee8d2"/><stop offset=".56" stop-color="#9ab8f8"/><stop offset="1" stop-color="#ffc0a7"/></linearGradient></defs><rect width="1024" height="1024" rx="44" fill="url(#g)"/><circle cx="360" cy="330" r="78" fill="rgba(255,255,255,.55)"/><circle cx="640" cy="370" r="64" fill="rgba(255,255,255,.42)"/></svg>`;
+        const blob = new Blob([svg], { type: "image/svg+xml" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "ai-painting-prototype-art.svg";
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast("已下载示例图片");
+      }
+
+      function filterHistory() {
+        const query = ($("[data-history-search]").value || "").trim().toLowerCase();
+        $$(".history-card").forEach((card) => {
+          const text = card.innerText.toLowerCase();
+          const favoriteOk = !state.historyFavoriteOnly || card.dataset.favorite === "true";
+          card.style.display = text.includes(query) && favoriteOk ? "" : "none";
+        });
+      }
+
+      function sortHistory() {
+        const grid = $(".history-grid");
+        const cards = $$(".history-card", grid);
+        state.historyAsc = !state.historyAsc;
+        cards.reverse().forEach((card) => grid.appendChild(card));
+        $("[data-action='sort-history']").textContent = state.historyAsc ? "排序：较早" : "排序：最近";
+      }
+
+      function refillFromHistory(card) {
+        const prompt = $("p", card)?.textContent || "";
+        promptEl.value = prompt;
+        activeSession().prompt = prompt;
+        updateSessionSummary(state.active);
+        setGalleryMode(false);
+        toast("已回填到当前会话");
+      }
+
+      function setGalleryMode(open) {
+        $("[data-main]").classList.toggle("gallery-mode", open);
+        const button = $("[data-gallery-toggle]");
+        button.textContent = open ? "← 工作台" : "▦ 图库";
+        button.dataset.action = open ? "close-gallery" : "open-gallery";
+      }
+
+      function setSettingsVisible(visible) {
+        state.settingsVisible = visible;
+        $("[data-main]").classList.toggle("settings-hidden", !visible);
+        toast(visible ? "已显示设置区" : "已隐藏设置区");
+      }
+
+      function toggleTheme() {
+        state.darkMode = !state.darkMode;
+        document.body.classList.toggle("dark", state.darkMode);
+        $("[data-theme-label]").textContent = state.darkMode ? "黑夜模式" : "白天模式";
+        $("[data-theme-switch]").classList.toggle("off", !state.darkMode);
+        toast(state.darkMode ? "已切换黑夜主题" : "已切换白天主题");
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        const action = target.closest("[data-action]")?.dataset.action;
+        const sessionCard = target.closest(".session");
+        const artTool = target.closest("[data-tool]");
+        const historyCard = target.closest(".history-card");
+        const historyAction = target.closest(".history-actions .pill");
+        const segmentItem = target.closest(".segmented span");
+        const switchEl = target.closest(".switch");
+
+        if (sessionCard) {
+          setActiveSession(sessionCard.dataset.session);
+          return;
+        }
+
+        if (segmentItem) {
+          const group = segmentItem.closest(".segmented");
+          const param = group.dataset.param;
+          activeSession()[param] = segmentItem.textContent.trim();
+          updateSegment(param, activeSession()[param]);
+          renderSession();
+          updateSessionSummary(state.active);
+          return;
+        }
+
+        if (switchEl && !switchEl.closest("[data-action='toggle-theme']")) {
+          switchEl.classList.toggle("off");
+          toast(switchEl.classList.contains("off") ? "已关闭" : "已开启");
+          return;
+        }
+
+        if (artTool) {
+          const tool = artTool.dataset.tool;
+          const card = artTool.closest(".art-card");
+          if (tool === "preview") openPreview(card);
+          if (tool === "zoom") { openPreview(card); setZoom(.25); }
+          if (tool === "copy") copyText(activeSession().prompt);
+          if (tool === "download") downloadPlaceholder();
+          return;
+        }
+
+        if (historyAction) {
+          const label = historyAction.textContent.trim();
+          if (label === "收藏") {
+            const next = historyCard.dataset.favorite !== "true";
+            historyCard.dataset.favorite = String(next);
+            historyAction.classList.toggle("good", next);
+            toast(next ? "已收藏" : "已取消收藏");
+          } else if (label.includes("回填")) {
+            refillFromHistory(historyCard);
+          } else if (label === "下载" || label === "保存") {
+            downloadPlaceholder();
+          } else if (label === "复制") {
+            copyText($("p", historyCard)?.textContent || "");
+          } else if (label === "删除") {
+            historyCard.remove();
+            toast("已删除历史项");
+          } else if (label.includes("展开")) {
+            toast($("p", historyCard)?.textContent || "无详情");
+          }
+          filterHistory();
+          return;
+        }
+
+        if (historyCard) {
+          $$(".history-card").forEach((card) => card.classList.remove("selected"));
+          historyCard.classList.add("selected");
+          state.selectedHistory = historyCard;
+          return;
+        }
+
+        if (!action) return;
+
+        if (action === "new-session") createSession();
+        if (action === "generate") simulateGenerate();
+        if (action === "clear-prompt") clearPrompt();
+        if (action === "refill-current") {
+          promptEl.value = sessions.greenhouse.prompt;
+          activeSession().prompt = promptEl.value;
+          toast("已回填示例参数");
+        }
+        if (action === "open-gallery") {
+          setGalleryMode(true);
+          filterHistory();
+        }
+        if (action === "close-gallery") setGalleryMode(false);
+        if (action === "toggle-settings") {
+          const inGallery = $("[data-main]").classList.contains("gallery-mode");
+          setGalleryMode(false);
+          setSettingsVisible(inGallery ? true : !state.settingsVisible);
+        }
+        if (action === "toggle-theme") toggleTheme();
+        if (action === "sort-history") sortHistory();
+        if (action === "filter-favorites") {
+          state.historyFavoriteOnly = !state.historyFavoriteOnly;
+          target.textContent = state.historyFavoriteOnly ? "★ 全部历史" : "★ 只看收藏";
+          filterHistory();
+        }
+        if (action === "delete-selected") {
+          if (state.selectedHistory?.isConnected) {
+            state.selectedHistory.remove();
+            state.selectedHistory = null;
+            toast("已删除所选历史");
+          } else {
+            toast("请先选择历史项");
+          }
+        }
+        if (action === "edit-base-url") {
+          const current = $("[data-action='edit-base-url'] code").textContent;
+          const next = window.prompt("baseURL", current);
+          if (next) {
+            $("[data-action='edit-base-url'] code").textContent = next;
+            $("[data-endpoint]").textContent = `${next}/v1/images/generations`;
+            $("[data-connect-status]").textContent = "已更新";
+            toast("baseURL 已更新");
+          }
+        }
+        if (action === "toggle-key") {
+          state.apiKeyVisible = !state.apiKeyVisible;
+          $("[data-action='toggle-key'] code").textContent = state.apiKeyVisible ? "sk-demo-123456789xQ" : "sk-••••••••••••9xQ";
+          $("[data-action='toggle-key'] span").textContent = state.apiKeyVisible ? "隐藏" : "显示";
+        }
+        if (action === "cycle-default-model" || action === "cycle-session-model") {
+          const label = $(`[data-action='${action}'] span:first-child`);
+          const next = modelOptions[(modelOptions.indexOf(label.textContent.trim()) + 1) % modelOptions.length];
+          label.textContent = next;
+          if (action === "cycle-session-model") {
+            activeSession().model = next;
+            updateSessionSummary(state.active);
+          }
+        }
+        if (action === "cycle-count") {
+          const session = activeSession();
+          session.count = session.count >= 4 ? 1 : session.count + 1;
+          renderSession();
+          updateSessionSummary(state.active);
+        }
+        if (action === "close-preview") modal.classList.remove("open");
+        if (action === "zoom-in") setZoom(.25);
+        if (action === "zoom-out") setZoom(-.25);
+        if (action === "copy-preview") copyText(activeSession().prompt);
+        if (action === "download-preview") downloadPlaceholder();
+      });
+
+      promptEl.addEventListener("input", () => {
+        activeSession().prompt = promptEl.value;
+        updateSessionSummary(state.active);
+      });
+
+      $("[data-history-search]").addEventListener("input", filterHistory);
+
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) modal.classList.remove("open");
+      });
+
+      renderSession();
+      $$(".switch:not([data-theme-switch])").forEach((switchEl) => switchEl.classList.remove("off"));
+      $$(".fail-content").forEach((block) => {
+        block.addEventListener("click", () => block.classList.toggle("collapsed"));
+      });
+    })();
+  </script>
+</body>
+</html>

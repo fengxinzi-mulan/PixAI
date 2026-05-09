@@ -1,4 +1,5 @@
 import { formatDuration } from '@shared/duration'
+import { formatImageQuality } from '@shared/image-options'
 import type { ImageHistoryItem } from '@shared/types'
 
 const PREVIEW_MIN_ZOOM = 0.25
@@ -31,7 +32,7 @@ export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataR
   const rows: PreviewMetadataRow[] = [
     { label: '用时', value: item.durationMs != null ? formatDuration(item.durationMs) : '未知' },
     { label: '比例', value: item.ratio },
-    { label: '质量', value: item.quality }
+    { label: '质量', value: formatImageQuality(item.quality) }
   ]
 
   if (item.size) {

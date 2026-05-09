@@ -1,6 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Settings } from 'lucide-react'
-import { IMAGE_QUALITIES, IMAGE_RATIOS } from '@shared/image-options'
+import { IMAGE_QUALITIES, IMAGE_RATIOS, formatImageQuality } from '@shared/image-options'
 import type { ImageQuality, ImageRatio } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 
@@ -94,7 +94,7 @@ export function SettingsPanel(): JSX.Element {
                   className={conversation.quality === quality ? 'on' : ''}
                   onClick={() => void updateActiveConversation({ quality })}
                 >
-                  {quality}
+                  {formatImageQuality(quality)}
                 </button>
               ))}
             </div>

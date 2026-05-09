@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { ArrowLeft, CheckSquare, Heart, Search, Square, Star, Trash2, X } from 'lucide-react'
 import type { ImageHistoryItem, ImageQuality, ImageRatio, ImageStatus } from '@shared/types'
-import { IMAGE_QUALITIES, IMAGE_RATIOS } from '@shared/image-options'
+import { IMAGE_QUALITIES, IMAGE_RATIOS, formatImageQuality } from '@shared/image-options'
 import { useAppStore } from '@renderer/store/app-store'
 import { ImageTile } from '@renderer/components/workspace/ImageTile'
 import { GallerySelect, type GallerySelectOption } from './GallerySelect'
@@ -45,7 +45,7 @@ const ratioFilterOptions: Array<GallerySelectOption<'all' | ImageRatio>> = [
 ]
 const qualityFilterOptions: Array<GallerySelectOption<'all' | ImageQuality>> = [
   { value: 'all', label: '质量' },
-  ...IMAGE_QUALITIES.map((quality) => ({ value: quality, label: quality }))
+  ...IMAGE_QUALITIES.map((quality) => ({ value: quality, label: formatImageQuality(quality) }))
 ]
 const pageSizeSelectOptions: Array<GallerySelectOption<number>> = pageSizeOptions.map((value) => ({
   value,
@@ -233,16 +233,6 @@ export function GalleryPage(): JSX.Element {
 
   return (
     <section className="gallery-page">
-      <div className="gallery-hero">
-        <div>
-          <h2>图库</h2>
-        </div>
-        <button onClick={() => setView('workspace')}>
-          <ArrowLeft size={16} />
-          返回工作台
-        </button>
-      </div>
-
       <div className="gallery-tools">
         <div className="search-wrap">
           <Search size={16} />
@@ -271,7 +261,9 @@ export function GalleryPage(): JSX.Element {
       </div>
 
       <div className="gallery-bulkbar">
-        <div className="gallery-counts muted-line">{selectedIds.size > 0 && !allFilteredSelected ? `已选 ${selectedIds.size}` : null}</div>
+        <div className="gallery-bulk-title">
+          <span>批量操作</span>
+        </div>
         <div className="gallery-bulk-actions">
           <button className={allFilteredSelected ? 'active-soft' : ''} disabled={sortedHistory.length === 0} onClick={toggleSelectAll}>
             {allFilteredSelected ? <CheckSquare size={15} /> : <Square size={15} />}

@@ -14,7 +14,6 @@ export function Topbar(): JSX.Element {
         </div>
         <div>
           <h1>PixAI</h1>
-          <span>多会话图片生成工作台</span>
         </div>
       </div>
       <div className="endpoint">

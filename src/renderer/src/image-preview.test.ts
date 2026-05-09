@@ -76,7 +76,7 @@ describe('image preview zoom helpers', () => {
     expect(getPreviewMetadataRows(item)).toEqual([
       { label: '用时', value: '1m 5s' },
       { label: '比例', value: '3:4' },
-      { label: '质量', value: 'high' },
+      { label: '质量', value: '高' },
       { label: '尺寸', value: '1024x1365' },
       { label: '大小', value: '2.5 MB' },
       { label: '模型', value: 'gpt-image-2' }

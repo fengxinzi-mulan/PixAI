@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IMAGE_QUALITIES, IMAGE_RATIOS, buildImageEndpoint, buildImageRequestBody, ratioToSize } from './image-options'
+import { IMAGE_QUALITIES, IMAGE_QUALITY_LABELS, IMAGE_RATIOS, buildImageEndpoint, buildImageRequestBody, formatImageQuality, ratioToSize } from './image-options'
 
 describe('image options', () => {
   it('maps expanded ratios to API size strings', () => {
@@ -17,6 +17,15 @@ describe('image options', () => {
 
   it('exposes GPT and compatibility quality options', () => {
     expect(IMAGE_QUALITIES).toEqual(['auto', 'low', 'medium', 'high', 'standard', 'hd'])
+    expect(IMAGE_QUALITY_LABELS).toEqual({
+      auto: '自动',
+      low: '低',
+      medium: '中',
+      high: '高',
+      standard: '标准',
+      hd: '高清'
+    })
+    expect(formatImageQuality('hd')).toBe('高清')
   })
 
   it('normalizes baseURL into the generations endpoint', () => {

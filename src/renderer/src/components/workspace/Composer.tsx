@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, type FormEvent, type JSX } from 'react'
 import { Loader2, Sparkles, Wand2, X } from 'lucide-react'
+import { formatImageQuality } from '@shared/image-options'
 import type { Conversation } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 
 export function Composer({ conversation, generating }: { conversation: Conversation; generating: boolean }): JSX.Element {
-  const { updateActiveConversation, generate, notify } = useAppStore()
+  const { updateActiveConversation, generate } = useAppStore()
   const promptRef = useRef<HTMLTextAreaElement>(null)
   const charCount = conversation.draftPrompt.length
   const submit = (event: FormEvent) => {
@@ -28,9 +29,9 @@ export function Composer({ conversation, generating }: { conversation: Conversat
           </span>
           <span className="pill">已保存</span>
         </div>
-        <button type="button" onClick={() => void updateActiveConversation({ draftPrompt: '' })}>
+        <button className="clear-prompt-button" type="button" onClick={() => void updateActiveConversation({ draftPrompt: '' })}>
           <X size={15} />
-          清空
+          <span>清空</span>
         </button>
       </div>
       <div className="prompt-box">
@@ -41,11 +42,8 @@ export function Composer({ conversation, generating }: { conversation: Conversat
           placeholder="描述你想生成的画面，例如：一座明亮的玻璃温室，清晨薄雾漂浮在植物之间，浅绿色与奶白色，自然摄影质感。"
         />
         <div className="prompt-foot">
-          <span className="hint">{charCount} 字符 · {conversation.model} · {conversation.ratio} · {conversation.quality}</span>
+          <span className="hint">{charCount} 字符 · {conversation.model} · {conversation.ratio} · {formatImageQuality(conversation.quality)}</span>
           <div className="mini-controls">
-            <button type="button" onClick={() => notify('草稿已自动保存')}>
-              已保存
-            </button>
             <button className="primary generate-button" disabled={generating || !conversation.draftPrompt.trim()}>
               {generating ? <Loader2 className="spin" size={16} /> : <Wand2 size={16} />}
               {generating ? '生成中...' : '生成图片'}

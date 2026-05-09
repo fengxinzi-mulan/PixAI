@@ -1,5 +1,5 @@
 export type ImageRatio = '1:1' | '3:2' | '2:3' | '4:3' | '3:4' | '16:9' | '9:16' | '21:9' | '9:21'
-export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'standard' | 'hd'
+export type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 export type ImageStatus = 'succeeded' | 'failed'
 export type GenerationRunStatus = 'running' | ImageStatus
 export type GenerationMode = 'text-to-image' | 'image-to-image'

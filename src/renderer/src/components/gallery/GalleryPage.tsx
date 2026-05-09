@@ -56,9 +56,7 @@ const qualityOrder: Record<ImageQuality, number> = {
   auto: 0,
   low: 1,
   medium: 2,
-  standard: 3,
-  high: 4,
-  hd: 5
+  high: 3
 }
 
 function compareByTimeDesc(a: ImageHistoryItem, b: ImageHistoryItem): number {

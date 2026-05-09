@@ -12,13 +12,13 @@ export function CanvasArea({
   runs,
   generationStartedAt,
   generating,
-  canceledIndexes,
+  removedIndexes,
   generationClockMs
 }: {
   runs: GenerationRun[]
   generationStartedAt: number | null
   generating: boolean
-  canceledIndexes: number[]
+  removedIndexes: number[]
   generationClockMs: number
 }): JSX.Element {
   const { conversations, activeConversationId } = useAppStore()
@@ -33,9 +33,9 @@ export function CanvasArea({
   const showInitialPlaceholders = generating && current && !currentGenerationRun
   const runGridSlots = generating && current
     ? activeRun
-      ? getWorkspaceRunGridSlots(activeRun.n, activeRun.items, canceledIndexes)
+      ? getWorkspaceRunGridSlots(activeRun.n, activeRun.items, removedIndexes)
       : showInitialPlaceholders
-        ? getWorkspaceRunGridSlots(current.n, [], canceledIndexes)
+        ? getWorkspaceRunGridSlots(current.n, [], removedIndexes)
         : []
     : []
   const generatingCount = runGridSlots.filter((slot) => slot.type === 'placeholder').length

@@ -67,7 +67,7 @@ describe('image preview zoom helpers', () => {
     const item = {
       model: 'gpt-image-2',
       ratio: '3:4',
-      size: '1024x1365',
+      size: '1024x1536',
       quality: 'high',
       durationMs: 65_000,
       fileSizeBytes: 2_621_440
@@ -78,7 +78,7 @@ describe('image preview zoom helpers', () => {
       { label: '用时', value: '1m 5s' },
       { label: '比例', value: '3:4' },
       { label: '质量', value: '高' },
-      { label: '尺寸', value: '1024x1365' },
+      { label: '尺寸', value: '1024x1536' },
       { label: '大小', value: '2.5 MB' },
       { label: '模型', value: 'gpt-image-2' }
     ])

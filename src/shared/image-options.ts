@@ -2,14 +2,12 @@ import type { GenerateImageInput, ImageQuality, ImageRatio } from './types'
 
 export const DEFAULT_MODEL = 'gpt-image-2'
 export const IMAGE_RATIOS: ImageRatio[] = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21']
-export const IMAGE_QUALITIES: GenerateImageInput['quality'][] = ['auto', 'low', 'medium', 'high', 'standard', 'hd']
+export const IMAGE_QUALITIES: GenerateImageInput['quality'][] = ['auto', 'low', 'medium', 'high']
 export const IMAGE_QUALITY_LABELS: Record<ImageQuality, string> = {
   auto: '自动',
   low: '低',
   medium: '中',
-  high: '高',
-  standard: '标准',
-  hd: '高清'
+  high: '高'
 }
 
 const ratioSizeMap: Record<ImageRatio, string> = {

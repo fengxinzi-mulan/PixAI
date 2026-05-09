@@ -8,12 +8,12 @@ import { Workspace } from '@renderer/components/workspace/Workspace'
 export function MainLayout({
   activeConversationGenerating,
   activeConversationStartedAt,
-  activeConversationCanceledIndexes,
+  activeConversationRemovedIndexes,
   generationClockMs
 }: {
   activeConversationGenerating: boolean
   activeConversationStartedAt: number | null
-  activeConversationCanceledIndexes: number[]
+  activeConversationRemovedIndexes: number[]
   generationClockMs: number
 }): JSX.Element {
   const { view, settingsVisible } = useAppStore()
@@ -52,7 +52,7 @@ export function MainLayout({
         <Workspace
           activeConversationGenerating={activeConversationGenerating}
           activeConversationStartedAt={activeConversationStartedAt}
-          activeConversationCanceledIndexes={activeConversationCanceledIndexes}
+          activeConversationRemovedIndexes={activeConversationRemovedIndexes}
           generationClockMs={generationClockMs}
         />
       )}

@@ -8,7 +8,7 @@ function App(): JSX.Element {
   const activeConversationId = useAppStore((state) => state.activeConversationId)
   const generatingByConversation = useAppStore((state) => state.generatingByConversation)
   const generationStartedAtByConversation = useAppStore((state) => state.generationStartedAtByConversation)
-  const canceledGenerationIndexesByConversation = useAppStore((state) => state.canceledGenerationIndexesByConversation)
+  const removedGenerationIndexesByConversation = useAppStore((state) => state.removedGenerationIndexesByConversation)
   const generationClockMs = useAppStore((state) => state.generationClockMs)
   const load = useAppStore((state) => state.load)
   const toast = useAppStore((state) => state.toast)
@@ -16,9 +16,9 @@ function App(): JSX.Element {
     ? {
         generating: Boolean(generatingByConversation[activeConversationId]),
         startedAt: generationStartedAtByConversation[activeConversationId] ?? null,
-        canceledIndexes: canceledGenerationIndexesByConversation[activeConversationId] ?? []
+        removedIndexes: removedGenerationIndexesByConversation[activeConversationId] ?? []
       }
-    : { generating: false, startedAt: null, canceledIndexes: [] }
+    : { generating: false, startedAt: null, removedIndexes: [] }
 
   useEffect(() => {
     void load()
@@ -32,7 +32,7 @@ function App(): JSX.Element {
           <MainLayout
             activeConversationGenerating={activeGenerationState.generating}
             activeConversationStartedAt={activeGenerationState.startedAt}
-            activeConversationCanceledIndexes={activeGenerationState.canceledIndexes}
+            activeConversationRemovedIndexes={activeGenerationState.removedIndexes}
             generationClockMs={generationClockMs}
           />
         </div>

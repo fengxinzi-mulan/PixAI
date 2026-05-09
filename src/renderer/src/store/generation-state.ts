@@ -1,7 +1,7 @@
 export type GenerationState = {
   generatingByConversation: Record<string, boolean>
   startedAtByConversation: Record<string, number>
-  canceledIndexesByConversation: Record<string, number[]>
+  removedIndexesByConversation: Record<string, number[]>
 }
 
 export function getConversationGenerationState(
@@ -23,31 +23,31 @@ export function beginConversationGeneration(
   return {
     generatingByConversation: { ...state.generatingByConversation, [conversationId]: true },
     startedAtByConversation: { ...state.startedAtByConversation, [conversationId]: startedAt },
-    canceledIndexesByConversation: { ...state.canceledIndexesByConversation, [conversationId]: [] }
+    removedIndexesByConversation: { ...state.removedIndexesByConversation, [conversationId]: [] }
   }
 }
 
 export function endConversationGeneration(conversationId: string, state: GenerationState): GenerationState {
   const generatingByConversation = { ...state.generatingByConversation }
   const startedAtByConversation = { ...state.startedAtByConversation }
-  const canceledIndexesByConversation = { ...state.canceledIndexesByConversation }
+  const removedIndexesByConversation = { ...state.removedIndexesByConversation }
   delete generatingByConversation[conversationId]
   delete startedAtByConversation[conversationId]
-  delete canceledIndexesByConversation[conversationId]
-  return { generatingByConversation, startedAtByConversation, canceledIndexesByConversation }
+  delete removedIndexesByConversation[conversationId]
+  return { generatingByConversation, startedAtByConversation, removedIndexesByConversation }
 }
 
-export function markGenerationRequestCanceled(
+export function markGenerationRequestRemoved(
   conversationId: string,
   requestIndex: number,
   state: GenerationState
 ): GenerationState {
-  const current = state.canceledIndexesByConversation[conversationId] || []
+  const current = state.removedIndexesByConversation[conversationId] || []
   const nextIndexes = current.includes(requestIndex) ? current : [...current, requestIndex].sort((a, b) => a - b)
   return {
     ...state,
-    canceledIndexesByConversation: {
-      ...state.canceledIndexesByConversation,
+    removedIndexesByConversation: {
+      ...state.removedIndexesByConversation,
       [conversationId]: nextIndexes
     }
   }

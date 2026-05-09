@@ -7,7 +7,7 @@ describe('workspace placeholders', () => {
     expect(getGeneratingPlaceholderIndexes(4, [1, 3], [2])).toEqual([0])
   })
 
-  it('returns no placeholders when all indexes are completed or canceled', () => {
+  it('returns no placeholders when all indexes are completed or removed', () => {
     expect(getGeneratingPlaceholderIndexes(3, [0, 2], [1])).toEqual([])
   })
 
@@ -17,6 +17,15 @@ describe('workspace placeholders', () => {
 
     expect(getWorkspaceRunGridSlots(4, [succeeded, failed], [1])).toEqual([
       { type: 'item', requestIndex: 0, item: failed },
+      { type: 'item', requestIndex: 2, item: succeeded },
+      { type: 'placeholder', requestIndex: 3 }
+    ])
+  })
+
+  it('does not recreate placeholders for active-run items hidden after deletion', () => {
+    const succeeded = { id: 'ok', requestIndex: 2, status: 'succeeded' } as ImageHistoryItem
+
+    expect(getWorkspaceRunGridSlots(4, [succeeded], [0, 1])).toEqual([
       { type: 'item', requestIndex: 2, item: succeeded },
       { type: 'placeholder', requestIndex: 3 }
     ])

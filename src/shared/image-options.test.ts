@@ -16,16 +16,14 @@ describe('image options', () => {
   })
 
   it('exposes GPT and compatibility quality options', () => {
-    expect(IMAGE_QUALITIES).toEqual(['auto', 'low', 'medium', 'high', 'standard', 'hd'])
+    expect(IMAGE_QUALITIES).toEqual(['auto', 'low', 'medium', 'high'])
     expect(IMAGE_QUALITY_LABELS).toEqual({
       auto: '自动',
       low: '低',
       medium: '中',
-      high: '高',
-      standard: '标准',
-      hd: '高清'
+      high: '高'
     })
-    expect(formatImageQuality('hd')).toBe('高清')
+    expect(formatImageQuality('high')).toBe('高')
   })
 
   it('normalizes baseURL into the generations endpoint', () => {

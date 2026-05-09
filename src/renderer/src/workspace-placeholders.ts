@@ -7,26 +7,26 @@ export type WorkspaceRunGridSlot =
 export function getGeneratingPlaceholderIndexes(
   totalCount: number,
   completedIndexes: Array<number | null | undefined>,
-  canceledIndexes: number[]
+  removedIndexes: number[]
 ): number[] {
   const completed = new Set(completedIndexes.filter((index): index is number => typeof index === 'number'))
-  const canceled = new Set(canceledIndexes)
+  const removed = new Set(removedIndexes)
   return Array.from({ length: Math.max(0, totalCount) }, (_value, index) => index)
-    .filter((index) => !completed.has(index) && !canceled.has(index))
+    .filter((index) => !completed.has(index) && !removed.has(index))
 }
 
 export function getWorkspaceRunGridSlots(
   totalCount: number,
   items: ImageHistoryItem[],
-  canceledIndexes: number[]
+  removedIndexes: number[]
 ): WorkspaceRunGridSlot[] {
-  const canceled = new Set(canceledIndexes)
+  const removed = new Set(removedIndexes)
   const itemsByIndex = new Map<number, ImageHistoryItem>()
   const unindexedItems: ImageHistoryItem[] = []
 
   for (const item of items) {
     if (typeof item.requestIndex === 'number') {
-      if (!canceled.has(item.requestIndex)) itemsByIndex.set(item.requestIndex, item)
+      if (!removed.has(item.requestIndex)) itemsByIndex.set(item.requestIndex, item)
     } else {
       unindexedItems.push(item)
     }
@@ -34,7 +34,7 @@ export function getWorkspaceRunGridSlots(
 
   const slots: WorkspaceRunGridSlot[] = []
   for (let requestIndex = 0; requestIndex < Math.max(0, totalCount); requestIndex += 1) {
-    if (canceled.has(requestIndex)) continue
+    if (removed.has(requestIndex)) continue
     const item = itemsByIndex.get(requestIndex)
     slots.push(item ? { type: 'item', requestIndex, item } : { type: 'placeholder', requestIndex })
   }

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
-import { buildImageEndpoint, buildImageRequestBody, ratioToSize } from '@shared/image-options'
+import { buildImageEditEndpoint, buildImageEndpoint, buildImageRequestBody, ratioToSize } from '@shared/image-options'
 import { elapsedMs } from '@shared/duration'
-import type { GenerateImageInput, GenerateImageResult, GenerationRun, ImageHistoryItem } from '@shared/types'
+import type { GenerateImageInput, GenerateImageResult, GenerationMode, GenerationRun, ImageHistoryItem, ReferenceImage } from '@shared/types'
 import type { AppDatabase } from './database'
 import { createErrorDetails } from './error-details'
 import type { ImageResponseData } from './image-response'
@@ -37,6 +37,8 @@ export class ImageService {
     const model = input.model.trim() || settings.defaultModel
     const size = ratioToSize(input.ratio)
     const createdAt = new Date().toISOString()
+    const referenceImages = this.getGenerationReferences(input)
+    const generationMode: GenerationMode = referenceImages.length > 0 ? 'image-to-image' : 'text-to-image'
     const run = this.database.insertRun({
       id: randomUUID(),
       conversationId: input.conversationId,
@@ -50,8 +52,11 @@ export class ImageService {
       status: 'running',
       errorMessage: null,
       errorDetails: null,
+      generationMode,
+      referenceImages,
       createdAt
     })
+    if (referenceImages.length > 0) this.database.insertRunReferences(run.id, referenceImages)
 
     if (!prompt) {
       return this.saveFailure(input, run, model, 'Prompt is required.', 'validation', { reason: 'Prompt is required.' }, createdAt, elapsedMs(startedAtMs))
@@ -63,7 +68,7 @@ export class ImageService {
       }, createdAt, elapsedMs(startedAtMs))
     }
 
-    const endpoint = buildImageEndpoint(settings.baseURL)
+    const endpoint = generationMode === 'image-to-image' ? buildImageEditEndpoint(settings.baseURL) : buildImageEndpoint(settings.baseURL)
     const targetCount = Math.min(10, Math.max(1, input.n || 1))
     const requestControllers = Array.from({ length: targetCount }, () => ({ controller: new AbortController() }))
     this.activeRequests.set(input.conversationId, requestControllers)
@@ -74,7 +79,7 @@ export class ImageService {
       await Promise.all(
         requestControllers.map(async ({ controller }, requestIndex) => {
           try {
-            const imageData = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, controller.signal)
+            const imageData = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, referenceImages, controller.signal)
             const image = imageData[0]
             if (!image) {
               const durationMs = elapsedMs(startedAtMs)
@@ -106,6 +111,8 @@ export class ImageService {
               status: 'succeeded',
               errorMessage: null,
               errorDetails: null,
+              generationMode,
+              referenceImages,
               globalVisible,
               createdAt: new Date().toISOString()
             })
@@ -221,8 +228,13 @@ export class ImageService {
     endpoint: string,
     apiKey: string,
     input: GenerateImageInput,
+    referenceImages: ReferenceImage[],
     signal: AbortSignal
   ): Promise<ImageResponseData[]> {
+    if (referenceImages.length > 0) {
+      return this.requestImageEditBatch(endpoint, apiKey, input, referenceImages, signal)
+    }
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -237,6 +249,50 @@ export class ImageService {
 
     if (!response.ok) {
       throw new ImageHttpError(payload.error?.message || `Image generation failed with HTTP ${response.status}.`, {
+        endpoint,
+        httpStatus: response.status,
+        httpStatusText: response.statusText,
+        responseError: payload.error,
+        responseBody: responseText,
+        parseError
+      })
+    }
+
+    return payload.data || []
+  }
+
+  private async requestImageEditBatch(
+    endpoint: string,
+    apiKey: string,
+    input: GenerateImageInput,
+    referenceImages: ReferenceImage[],
+    signal: AbortSignal
+  ): Promise<ImageResponseData[]> {
+    const formData = new FormData()
+    formData.set('prompt', input.prompt.trim())
+    formData.set('model', input.model.trim())
+    formData.set('size', ratioToSize(input.ratio))
+    formData.set('quality', input.quality)
+    formData.set('n', String(Math.min(10, Math.max(1, input.n || 1))))
+    for (const referenceImage of referenceImages) {
+      if (!referenceImage.filePath) continue
+      const fileBuffer = readFileSync(referenceImage.filePath)
+      formData.append('image[]', new Blob([fileBuffer], { type: referenceImage.mimeType }), referenceImage.name)
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal,
+      body: formData
+    })
+    const responseText = await response.text()
+    const { payload, parseError } = this.parseResponse(responseText)
+
+    if (!response.ok) {
+      throw new ImageHttpError(payload.error?.message || `Image edit failed with HTTP ${response.status}.`, {
         endpoint,
         httpStatus: response.status,
         httpStatusText: response.statusText,
@@ -293,9 +349,25 @@ export class ImageService {
       status: 'failed',
       errorMessage,
       errorDetails,
+      generationMode: run.generationMode,
+      referenceImages: run.referenceImages,
       globalVisible: this.database.getConversation(input.conversationId)?.autoSaveHistory !== false,
       createdAt
     })
+  }
+
+  private getGenerationReferences(input: GenerateImageInput): ReferenceImage[] {
+    const requestedIds = input.referenceImageIds || []
+    if (requestedIds.length === 0) return []
+    const requestedIdSet = new Set(requestedIds)
+    const referencesById = new Map(
+      this.database.listConversationReferences(input.conversationId).map((reference) => [reference.id, reference])
+    )
+    return requestedIds
+      .filter((id, index) => requestedIds.indexOf(id) === index && requestedIdSet.has(id))
+      .map((id) => referencesById.get(id))
+      .filter((reference): reference is ReferenceImage => Boolean(reference?.filePath))
+      .slice(0, 8)
   }
 
   private parseResponse(responseText: string): { payload: ImageApiResponse; parseError: string | null } {

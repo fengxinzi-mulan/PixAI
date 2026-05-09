@@ -51,6 +51,10 @@ type AppState = {
   deleteConversation: (id: string) => Promise<void>
   updateActiveConversation: (input: ConversationUpdate) => Promise<void>
   updateSettings: (input: ProviderSettingsUpdate) => Promise<void>
+  importReferenceFiles: (files: File[]) => Promise<void>
+  addHistoryAsReference: (historyId: string) => Promise<void>
+  removeReferenceImage: (referenceImageId: string) => Promise<void>
+  reorderReferenceImages: (referenceImageIds: string[]) => Promise<void>
   generate: () => Promise<void>
   refreshConversationResults: (conversationId: string) => Promise<void>
   cancelGeneration: (conversationId?: string, requestIndex?: number) => Promise<void>
@@ -171,6 +175,64 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ settings })
     get().notify('设置已保存')
   },
+  importReferenceFiles: async (files) => {
+    const id = get().activeConversationId
+    if (!id || files.length === 0) return
+    try {
+      const payload = await Promise.all(files.map(async (file) => ({
+        name: file.name,
+        mimeType: file.type,
+        data: await file.arrayBuffer()
+      })))
+      const referenceImages = await window.pixai.reference.importFiles(id, payload)
+      set({
+        conversations: get().conversations.map((item) => (item.id === id ? { ...item, referenceImages } : item))
+      })
+      get().notify(`已添加 ${payload.length} 张参考图`)
+    } catch (error) {
+      get().notify(error instanceof Error ? error.message : '参考图添加失败')
+    }
+  },
+  addHistoryAsReference: async (historyId) => {
+    const state = get()
+    const id = state.activeConversationId
+    if (!id) return
+    const conversation = state.conversations.find((item) => item.id === id)
+    const sourceItem = state.history.find((item) => item.id === historyId)
+      || Object.values(state.runsByConversation)
+        .flatMap((runs) => runs.flatMap((run) => run.items))
+        .find((item) => item.id === historyId)
+    try {
+      for (const reference of conversation?.referenceImages || []) {
+        await window.pixai.reference.remove(id, reference.id)
+      }
+      const referenceImages = await window.pixai.reference.addFromHistory(id, historyId)
+      const updated = await window.pixai.conversation.update(id, { draftPrompt: sourceItem?.prompt || '' })
+      set({
+        conversations: get().conversations.map((item) => (item.id === id ? { ...updated, referenceImages } : item)),
+        view: 'workspace'
+      })
+      get().notify('已进入编辑')
+    } catch (error) {
+      get().notify(error instanceof Error ? error.message : '编辑失败')
+    }
+  },
+  removeReferenceImage: async (referenceImageId) => {
+    const id = get().activeConversationId
+    if (!id) return
+    const referenceImages = await window.pixai.reference.remove(id, referenceImageId)
+    set({
+      conversations: get().conversations.map((item) => (item.id === id ? { ...item, referenceImages } : item))
+    })
+  },
+  reorderReferenceImages: async (referenceImageIds) => {
+    const id = get().activeConversationId
+    if (!id) return
+    const referenceImages = await window.pixai.reference.reorder(id, referenceImageIds)
+    set({
+      conversations: get().conversations.map((item) => (item.id === id ? { ...item, referenceImages } : item))
+    })
+  },
   generate: async () => {
     const state = get()
     const conversation = state.conversations.find((item) => item.id === state.activeConversationId)
@@ -185,7 +247,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       model: conversation.model || state.settings?.defaultModel || DEFAULT_MODEL,
       ratio: conversation.ratio,
       quality: conversation.quality,
-      n: conversation.n
+      n: conversation.n,
+      referenceImageIds: conversation.referenceImages.map((reference) => reference.id)
     }
     const nextGenerationState = beginConversationGeneration(conversation.id, {
       generatingByConversation: state.generatingByConversation,

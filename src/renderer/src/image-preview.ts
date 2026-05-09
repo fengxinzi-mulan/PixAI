@@ -30,6 +30,7 @@ export function formatFileSize(bytes: number): string {
 
 export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataRow[] {
   const rows: PreviewMetadataRow[] = [
+    { label: '类型', value: item.generationMode === 'image-to-image' ? '图生图' : '文生图' },
     { label: '用时', value: item.durationMs != null ? formatDuration(item.durationMs) : '未知' },
     { label: '比例', value: item.ratio },
     { label: '质量', value: formatImageQuality(item.quality) }

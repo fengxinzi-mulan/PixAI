@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
-import { Check, Copy, Download, Heart, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, Heart, RotateCcw, SquarePen, Trash2 } from 'lucide-react'
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 import { PreviewModal } from '@renderer/components/preview/PreviewModal'
@@ -21,7 +21,7 @@ export function ImageTile({
   lockAspectRatio?: boolean
   onSelectedChange?: (selected: boolean) => void
 }): JSX.Element {
-  const { deleteHistory, toggleFavorite, reuseHistory, notify } = useAppStore()
+  const { addHistoryAsReference, deleteHistory, toggleFavorite, reuseHistory, notify } = useAppStore()
   const [previewOpen, setPreviewOpen] = useState(false)
   const tileRef = useRef<HTMLElement | null>(null)
   const [lockedHeight, setLockedHeight] = useState<number | null>(null)
@@ -147,6 +147,15 @@ export function ImageTile({
           }}
         >
           <Heart className={item.favorite ? 'filled' : ''} size={14} />
+        </button>
+        <button
+          title="编辑"
+          onClick={(event) => {
+            event.stopPropagation()
+            void addHistoryAsReference(item.id)
+          }}
+        >
+          <SquarePen size={14} />
         </button>
         {showReuseAction ? (
           <button

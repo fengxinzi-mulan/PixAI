@@ -2,6 +2,22 @@ export type ImageRatio = '1:1' | '3:2' | '2:3' | '4:3' | '3:4' | '16:9' | '9:16'
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'standard' | 'hd'
 export type ImageStatus = 'succeeded' | 'failed'
 export type GenerationRunStatus = 'running' | ImageStatus
+export type GenerationMode = 'text-to-image' | 'image-to-image'
+
+export type ReferenceImage = {
+  id: string
+  name: string
+  mimeType: string
+  filePath: string | null
+  fileSizeBytes: number
+  createdAt: string
+}
+
+export type ReferenceImageImportFile = {
+  name: string
+  mimeType: string
+  data: ArrayBuffer
+}
 
 export type GenerateImageInput = {
   conversationId: string
@@ -10,6 +26,7 @@ export type GenerateImageInput = {
   ratio: ImageRatio
   quality: ImageQuality
   n: number
+  referenceImageIds?: string[]
 }
 
 export type Conversation = {
@@ -22,6 +39,7 @@ export type Conversation = {
   n: number
   autoSaveHistory: boolean
   keepFailureDetails: boolean
+  referenceImages: ReferenceImage[]
   createdAt: string
   updatedAt: string
 }
@@ -47,6 +65,8 @@ export type ImageHistoryItem = {
   errorMessage: string | null
   errorDetails: string | null
   favorite: boolean
+  generationMode: GenerationMode
+  referenceImages: ReferenceImage[]
   createdAt: string
 }
 
@@ -63,6 +83,8 @@ export type GenerationRun = {
   durationMs: number | null
   errorMessage: string | null
   errorDetails: string | null
+  generationMode: GenerationMode
+  referenceImages: ReferenceImage[]
   createdAt: string
   items: ImageHistoryItem[]
 }
@@ -112,6 +134,13 @@ export type PixAIAPI = {
     url: (id: string) => string
     copy: (id: string) => Promise<void>
     download: (id: string) => Promise<string | null>
+  }
+  reference: {
+    importFiles: (conversationId: string, files: ReferenceImageImportFile[]) => Promise<ReferenceImage[]>
+    addFromHistory: (conversationId: string, historyId: string) => Promise<ReferenceImage[]>
+    remove: (conversationId: string, referenceImageId: string) => Promise<ReferenceImage[]>
+    reorder: (conversationId: string, referenceImageIds: string[]) => Promise<ReferenceImage[]>
+    url: (id: string) => string
   }
   history: {
     list: (options?: HistoryListOptions) => Promise<ImageHistoryItem[]>

@@ -37,6 +37,11 @@ export function buildImageEndpoint(baseURL: string): string {
   return `${normalized}/v1/images/generations`
 }
 
+export function buildImageEditEndpoint(baseURL: string): string {
+  const normalized = baseURL.trim().replace(/\/+$/, '')
+  return `${normalized}/v1/images/edits`
+}
+
 export function buildImageRequestBody(input: GenerateImageInput): Record<string, unknown> {
   return {
     prompt: input.prompt.trim(),

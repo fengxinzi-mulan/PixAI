@@ -15,7 +15,9 @@ const baseItem = {
   fileSizeBytes: null,
   status: 'succeeded' as const,
   errorMessage: null,
-  errorDetails: null
+  errorDetails: null,
+  generationMode: 'text-to-image' as const,
+  referenceImages: []
 } satisfies Omit<ImageHistoryItem, 'id' | 'prompt' | 'favorite' | 'createdAt'>
 
 describe('history filtering', () => {

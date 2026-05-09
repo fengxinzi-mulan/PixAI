@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type SyntheticEvent, type WheelEvent } from 'react'
-import { ChevronLeft, ChevronRight, Copy, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, Download, RotateCcw, SquarePen, X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
+import { ReferencePreviewModal } from './ReferencePreviewModal'
 import {
   clampPreviewZoom,
   formatPreviewZoom,
@@ -33,10 +34,11 @@ export function PreviewModal({
   items: ImageHistoryItem[]
   onClose: () => void
 }): JSX.Element {
-  const { notify } = useAppStore()
+  const { addHistoryAsReference, notify } = useAppStore()
   const artRef = useRef<HTMLDivElement | null>(null)
   const [currentId, setCurrentId] = useState(initialItem.id)
   const [zoom, setZoom] = useState(1)
+  const [previewReferenceId, setPreviewReferenceId] = useState<string | null>(null)
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null)
   const [artSize, setArtSize] = useState<{ width: number; height: number } | null>(null)
   const currentIndex = Math.max(0, items.findIndex((item) => item.id === currentId))
@@ -100,6 +102,11 @@ export function PreviewModal({
     notify('已复制提示词')
   }
 
+  const editImage = async () => {
+    await addHistoryAsReference(item.id)
+    onClose()
+  }
+
   return (
     <div
       className="modal open"
@@ -110,23 +117,28 @@ export function PreviewModal({
         <div className="modal-head">
           <span>图片预览</span>
           <div className="mini-controls">
-            <button onClick={() => setZoom((value) => clampPreviewZoom(value - 0.15))}>
+            <button title="缩小" onClick={() => setZoom((value) => clampPreviewZoom(value - 0.15))}>
               <ZoomOut size={15} />
             </button>
             <span className="zoom-value">{formatPreviewZoom(zoom)}</span>
-            <button onClick={() => setZoom((value) => clampPreviewZoom(value + 0.15))}>
+            <button title="放大" onClick={() => setZoom((value) => clampPreviewZoom(value + 0.15))}>
               <ZoomIn size={15} />
             </button>
-            <button onClick={() => setZoom(imageSize ? getPreviewFitZoom(imageSize, artSize) : 1)}>
-              重置
+            <button title="重置缩放" onClick={() => setZoom(imageSize ? getPreviewFitZoom(imageSize, artSize) : 1)}>
+              <RotateCcw size={15} />
             </button>
-            <button onClick={() => void window.pixai.image.copy(item.id).then(() => notify('已复制到剪贴板'))}>
-              复制
+            <button title="复制图片" onClick={() => void window.pixai.image.copy(item.id).then(() => notify('已复制到剪贴板'))}>
+              <Copy size={15} />
             </button>
-            <button onClick={() => void window.pixai.image.download(item.id).then((path) => path && notify('已保存图片'))}>
-              下载
+            <button title="下载图片" onClick={() => void window.pixai.image.download(item.id).then((path) => path && notify('已保存图片'))}>
+              <Download size={15} />
             </button>
-            <button onClick={onClose}>关闭</button>
+            <button title="编辑" onClick={() => void editImage()}>
+              <SquarePen size={14} />
+            </button>
+            <button title="关闭" onClick={onClose}>
+              <X size={15} />
+            </button>
           </div>
         </div>
         <div className="modal-body">
@@ -166,15 +178,40 @@ export function PreviewModal({
             </div>
             <div className="modal-prompt-head">
               <span>提示词</span>
-              <button onClick={() => void copyPrompt()}>
+              <button title="复制提示词" onClick={() => void copyPrompt()}>
                 <Copy size={14} />
-                复制
               </button>
             </div>
             <p>{item.prompt || '无提示词'}</p>
+            {item.generationMode === 'image-to-image' && item.referenceImages.length > 0 ? (
+              <div className="modal-references">
+                <div className="modal-prompt-head">
+                  <span>参考图</span>
+                </div>
+                <div className="modal-reference-grid">
+                  {item.referenceImages.map((reference) => (
+                    <button
+                      key={reference.id}
+                      type="button"
+                      title="预览参考图"
+                      onClick={() => setPreviewReferenceId(reference.id)}
+                    >
+                      <img src={window.pixai.reference.url(reference.id)} alt={reference.name} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </aside>
         </div>
       </div>
+      {previewReferenceId ? (
+        <ReferencePreviewModal
+          initialId={previewReferenceId}
+          references={item.referenceImages}
+          onClose={() => setPreviewReferenceId(null)}
+        />
+      ) : null}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
-import { ArrowLeft, CheckSquare, Heart, Search, Square, Star, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CheckSquare, Heart, RotateCcw, Search, Square, Star, Trash2 } from 'lucide-react'
 import type { ImageHistoryItem, ImageQuality, ImageRatio, ImageStatus } from '@shared/types'
 import { IMAGE_QUALITIES, IMAGE_RATIOS, formatImageQuality } from '@shared/image-options'
 import { useAppStore } from '@renderer/store/app-store'
@@ -255,7 +255,7 @@ export function GalleryPage(): JSX.Element {
         <GallerySelect value={qualityFilter} options={qualityFilterOptions} ariaLabel="筛选质量" onChange={setQualityFilter} />
         <GallerySelect value={sortMode} options={sortOptions} ariaLabel="排序方式" className="sort-select" onChange={setSortMode} />
         <button onClick={resetFilters}>
-          <X size={15} />
+          <RotateCcw size={15} />
           重置
         </button>
       </div>

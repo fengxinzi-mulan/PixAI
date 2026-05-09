@@ -4,7 +4,8 @@ import type {
   GenerateImageInput,
   HistoryListOptions,
   PixAIAPI,
-  ProviderSettingsUpdate
+  ProviderSettingsUpdate,
+  ReferenceImageImportFile
 } from '@shared/types'
 
 const api: PixAIAPI = {
@@ -30,6 +31,17 @@ const api: PixAIAPI = {
     list: (options?: HistoryListOptions) => ipcRenderer.invoke('history:list', options),
     delete: (id: string) => ipcRenderer.invoke('history:delete', id),
     favorite: (id: string, favorite: boolean) => ipcRenderer.invoke('history:favorite', id, favorite)
+  },
+  reference: {
+    importFiles: (conversationId: string, files: ReferenceImageImportFile[]) =>
+      ipcRenderer.invoke('reference:import-files', conversationId, files),
+    addFromHistory: (conversationId: string, historyId: string) =>
+      ipcRenderer.invoke('reference:add-from-history', conversationId, historyId),
+    remove: (conversationId: string, referenceImageId: string) =>
+      ipcRenderer.invoke('reference:remove', conversationId, referenceImageId),
+    reorder: (conversationId: string, referenceImageIds: string[]) =>
+      ipcRenderer.invoke('reference:reorder', conversationId, referenceImageIds),
+    url: (id: string) => `pixai-image://reference/${encodeURIComponent(id)}`
   },
   shell: {
     openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath)

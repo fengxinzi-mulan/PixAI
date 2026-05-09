@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IMAGE_QUALITIES, IMAGE_QUALITY_LABELS, IMAGE_RATIOS, buildImageEndpoint, buildImageRequestBody, formatImageQuality, ratioToSize } from './image-options'
+import { IMAGE_QUALITIES, IMAGE_QUALITY_LABELS, IMAGE_RATIOS, buildImageEditEndpoint, buildImageEndpoint, buildImageRequestBody, formatImageQuality, ratioToSize } from './image-options'
 
 describe('image options', () => {
   it('maps expanded ratios to API size strings', () => {
@@ -30,6 +30,10 @@ describe('image options', () => {
 
   it('normalizes baseURL into the generations endpoint', () => {
     expect(buildImageEndpoint('https://example.test///')).toBe('https://example.test/v1/images/generations')
+  })
+
+  it('normalizes baseURL into the edits endpoint', () => {
+    expect(buildImageEditEndpoint('https://example.test///')).toBe('https://example.test/v1/images/edits')
   })
 
   it('builds a request body without leaking empty optional fields', () => {

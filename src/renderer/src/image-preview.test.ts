@@ -74,6 +74,7 @@ describe('image preview zoom helpers', () => {
     } as ImageHistoryItem
 
     expect(getPreviewMetadataRows(item)).toEqual([
+      { label: '类型', value: '文生图' },
       { label: '用时', value: '1m 5s' },
       { label: '比例', value: '3:4' },
       { label: '质量', value: '高' },

@@ -57,7 +57,7 @@ export function Sidebar(): JSX.Element {
       <div className="app-footer">
         <div className="version-line">
           <span>PixAI</span>
-          <span>v0.1.0</span>
+          <span>v1.0.0</span>
         </div>
         <button className="theme-toggle" onClick={toggleTheme}>
           <span>{themeToggle.label}</span>

@@ -2,8 +2,9 @@ import { copyFileSync, existsSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell } from 'electron'
-import type { GenerateImageInput, HistoryListOptions, ProviderSettingsUpdate } from '@shared/types'
+import type { GenerateImageInput, HistoryListOptions, ProviderSettingsUpdate, ReferenceImageImportFile } from '@shared/types'
 import { AppDatabase } from './database'
+import { resolveDataDir } from './data-path'
 import { ImageService } from './image-service'
 import { SettingsStore } from './settings'
 import { createMainWindowOptions } from './window-options'
@@ -25,7 +26,7 @@ let settings: SettingsStore
 let imageService: ImageService
 
 function getDataDir(): string {
-  return app.isPackaged ? app.getPath('userData') : join(process.cwd(), 'data')
+  return resolveDataDir({ cwd: process.cwd(), packaged: app.isPackaged, exePath: app.getPath('exe') })
 }
 
 function createWindow(): void {
@@ -43,12 +44,13 @@ function createWindow(): void {
 function registerImageProtocol(): void {
   protocol.handle('pixai-image', async (request) => {
     const url = new URL(request.url)
+    const kind = url.hostname
     const id = decodeURIComponent(url.pathname.replace(/^\//, '') || url.hostname)
-    const item = database.getHistory(id)
-    if (!item?.filePath || !existsSync(item.filePath)) {
-      return new Response('Image not found.', { status: 404 })
+    const filePath = kind === 'reference' ? database.getReferenceImage(id)?.filePath : database.getHistory(id)?.filePath
+    if (!filePath || !existsSync(filePath)) {
+      return new Response(kind === 'reference' ? 'Reference image not found.' : 'Image not found.', { status: 404 })
     }
-    return net.fetch(pathToFileURL(item.filePath).toString())
+    return net.fetch(pathToFileURL(filePath).toString())
   })
 }
 
@@ -90,6 +92,21 @@ function registerIpc(): void {
     copyFileSync(item.filePath, result.filePath)
     return result.filePath
   })
+  ipcMain.handle('reference:import-files', (_event, conversationId: string, files: ReferenceImageImportFile[]) => {
+    for (const file of files) {
+      database.createReferenceImageFromBytes({ conversationId, ...file })
+    }
+    return database.listConversationReferences(conversationId)
+  })
+  ipcMain.handle('reference:add-from-history', (_event, conversationId: string, historyId: string) => {
+    database.addHistoryImageAsReference(conversationId, historyId)
+    return database.listConversationReferences(conversationId)
+  })
+  ipcMain.handle('reference:remove', (_event, conversationId: string, referenceImageId: string) =>
+    database.removeReferenceFromConversation(conversationId, referenceImageId))
+  ipcMain.handle('reference:reorder', (_event, conversationId: string, referenceImageIds: string[]) =>
+    database.reorderConversationReferences(conversationId, referenceImageIds))
+  ipcMain.handle('reference:url', (_event, id: string) => `pixai-image://reference/${encodeURIComponent(id)}`)
   ipcMain.handle('shell:open-path', (_event, filePath: string) => shell.openPath(filePath))
 }
 

@@ -56,7 +56,9 @@ type AppState = {
   cancelGeneration: (conversationId?: string, requestIndex?: number) => Promise<void>
   reloadHistory: (options?: Partial<HistoryListOptions>) => Promise<void>
   deleteHistory: (id: string) => Promise<void>
+  deleteHistoryItems: (ids: string[]) => Promise<void>
   toggleFavorite: (item: ImageHistoryItem) => Promise<void>
+  setFavoriteForHistoryItems: (items: ImageHistoryItem[], favorite: boolean) => Promise<void>
   reuseHistory: (item: ImageHistoryItem) => Promise<void>
   notify: (message: string | null) => void
 }
@@ -274,6 +276,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     get().notify('已删除历史项')
   },
+  deleteHistoryItems: async (ids) => {
+    const selectedIds = new Set(ids)
+    if (selectedIds.size === 0) return
+    const affectedConversationIds = new Set(
+      get().history
+        .filter((entry) => selectedIds.has(entry.id) && entry.conversationId)
+        .map((entry) => entry.conversationId as string)
+    )
+    for (const id of selectedIds) {
+      await window.pixai.history.delete(id)
+    }
+    await get().reloadHistory()
+    const runsByConversation = { ...get().runsByConversation }
+    for (const conversationId of affectedConversationIds) {
+      runsByConversation[conversationId] = await window.pixai.conversation.runs(conversationId)
+    }
+    set({ runsByConversation })
+    get().notify(`已删除 ${selectedIds.size} 项`)
+  },
   toggleFavorite: async (item) => {
     await window.pixai.history.favorite(item.id, !item.favorite)
     await get().reloadHistory()
@@ -281,6 +302,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       const runs = await window.pixai.conversation.runs(item.conversationId)
       set({ runsByConversation: { ...get().runsByConversation, [item.conversationId]: runs } })
     }
+  },
+  setFavoriteForHistoryItems: async (items, favorite) => {
+    if (items.length === 0) return
+    const affectedConversationIds = new Set(items.map((item) => item.conversationId).filter((id): id is string => Boolean(id)))
+    for (const item of items) {
+      await window.pixai.history.favorite(item.id, favorite)
+    }
+    await get().reloadHistory()
+    const runsByConversation = { ...get().runsByConversation }
+    for (const conversationId of affectedConversationIds) {
+      runsByConversation[conversationId] = await window.pixai.conversation.runs(conversationId)
+    }
+    set({ runsByConversation })
+    get().notify(favorite ? `已收藏 ${items.length} 项` : `已取消收藏 ${items.length} 项`)
   },
   reuseHistory: async (item) => {
     let id = item.conversationId || get().activeConversationId

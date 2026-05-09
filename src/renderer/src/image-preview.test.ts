@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ImageHistoryItem } from '@shared/types'
 import {
   clampPreviewZoom,
+  formatFileSize,
   formatPreviewZoom,
   getInitialPreviewZoom,
   getInitialPreviewZoomForArea,
@@ -56,13 +57,20 @@ describe('image preview zoom helpers', () => {
     expect(formatPreviewZoom(0.855)).toBe('86%')
   })
 
+  it('formats image file sizes', () => {
+    expect(formatFileSize(512)).toBe('512 B')
+    expect(formatFileSize(1536)).toBe('1.5 KB')
+    expect(formatFileSize(2_621_440)).toBe('2.5 MB')
+  })
+
   it('builds preview metadata rows from image history', () => {
     const item = {
       model: 'gpt-image-2',
       ratio: '3:4',
       size: '1024x1365',
       quality: 'high',
-      durationMs: 65_000
+      durationMs: 65_000,
+      fileSizeBytes: 2_621_440
     } as ImageHistoryItem
 
     expect(getPreviewMetadataRows(item)).toEqual([
@@ -70,6 +78,7 @@ describe('image preview zoom helpers', () => {
       { label: '比例', value: '3:4' },
       { label: '质量', value: 'high' },
       { label: '尺寸', value: '1024x1365' },
+      { label: '大小', value: '2.5 MB' },
       { label: '模型', value: 'gpt-image-2' }
     ])
   })

@@ -37,7 +37,7 @@ dist/PixAI Setup 0.1.0.exe
 
 ## 本地数据
 
-数据保存在 Electron `userData` 目录：
+开发环境下，数据保存在项目根目录的 `data/` 目录；打包安装后，数据仍保存在 Electron `userData` 目录：
 
 - `settings.json`：服务配置和 API Key 存储信息。
 - `pixai.sqlite`：会话、生成轮次和图片历史。

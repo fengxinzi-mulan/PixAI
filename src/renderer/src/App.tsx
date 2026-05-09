@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -295,11 +296,19 @@ function Workspace({
 
 function Composer({ conversation, generating }: { conversation: Conversation; generating: boolean }): JSX.Element {
   const { updateActiveConversation, generate, notify } = useAppStore()
+  const promptRef = useRef<HTMLTextAreaElement>(null)
   const charCount = conversation.draftPrompt.length
   const submit = (event: FormEvent) => {
     event.preventDefault()
     void generate()
   }
+
+  useLayoutEffect(() => {
+    const prompt = promptRef.current
+    if (!prompt) return
+    prompt.scrollTop = prompt.scrollHeight
+  }, [conversation.draftPrompt])
+
   return (
     <form className="composer" onSubmit={submit}>
       <div className="composer-head">
@@ -317,6 +326,7 @@ function Composer({ conversation, generating }: { conversation: Conversation; ge
       </div>
       <div className="prompt-box">
         <textarea
+          ref={promptRef}
           value={conversation.draftPrompt}
           onChange={(event) => void updateActiveConversation({ draftPrompt: event.target.value })}
           placeholder="描述你想生成的画面，例如：一座明亮的玻璃温室，清晨薄雾漂浮在植物之间，浅绿色与奶白色，自然摄影质感。"
@@ -357,8 +367,16 @@ function CanvasArea({
   const items = runs.flatMap((run) => run.items.map((item) => ({ item, run })))
   const activeRun = generating ? runs.find((run) => run.status === 'running') : null
   const generationElapsedMs = generationStartedAt != null ? elapsedMs(generationStartedAt, generationClockMs) : null
+  const currentGenerationRun = generationStartedAt == null
+    ? null
+    : runs.find((run) => Date.parse(run.createdAt) >= generationStartedAt - 2000) || null
+  const showInitialPlaceholders = generating && current && !currentGenerationRun
   const runGridSlots = generating && current
-    ? getWorkspaceRunGridSlots(current.n, activeRun?.items ?? [], canceledIndexes)
+    ? activeRun
+      ? getWorkspaceRunGridSlots(activeRun.n, activeRun.items, canceledIndexes)
+      : showInitialPlaceholders
+        ? getWorkspaceRunGridSlots(current.n, [], canceledIndexes)
+        : []
     : []
   const generatingCount = runGridSlots.filter((slot) => slot.type === 'placeholder').length
   const summarySegments = getWorkspaceResultSummarySegments(items.map(({ item }) => item), generatingCount)
@@ -426,7 +444,7 @@ function GeneratingTile({
 }): JSX.Element {
   const { cancelGeneration } = useAppStore()
   const [hovered, setHovered] = useState(false)
-  const seconds = generationElapsedMs == null ? 0 : Math.floor(generationElapsedMs / 1000)
+  const elapsedText = formatDuration(generationElapsedMs ?? 0)
   return (
     <article
       className="art-card loading generating-card"
@@ -435,8 +453,9 @@ function GeneratingTile({
       onMouseLeave={() => setHovered(false)}
     >
       <Loader2 className="art-spinner spin" size={24} />
+      <span className="generating-label">生成中</span>
       <div className="generating-meta">
-        <span>{`已耗时 ${seconds}s`}</span>
+        <span>{`已耗时 ${elapsedText}`}</span>
         {hovered ? (
           <button
             type="button"

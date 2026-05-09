@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
@@ -138,8 +138,8 @@ export class AppDatabase {
     this.db
       .prepare(
         `insert into image_history
-        (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, status, error_message, error_details, favorite, global_visible, created_at)
-        values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @status, @errorMessage, @errorDetails, @favorite, @globalVisible, @createdAt)`
+        (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, favorite, global_visible, created_at)
+        values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @favorite, @globalVisible, @createdAt)`
       )
       .run({ ...item, favorite: item.favorite ? 1 : 0, globalVisible: input.globalVisible === false ? 0 : 1 })
     return item
@@ -220,6 +220,7 @@ export class AppDatabase {
         quality text not null,
         duration_ms integer,
         file_path text,
+        file_size_bytes integer,
         status text not null,
         error_message text,
         error_details text,
@@ -237,6 +238,9 @@ export class AppDatabase {
     }
     if (!columns.some((column) => column.name === 'request_index')) {
       this.db.exec('alter table image_history add column request_index integer')
+    }
+    if (!columns.some((column) => column.name === 'file_size_bytes')) {
+      this.db.exec('alter table image_history add column file_size_bytes integer')
     }
     const runColumns = this.db.prepare('pragma table_info(generation_runs)').all() as Array<{ name: string }>
     if (!runColumns.some((column) => column.name === 'duration_ms')) {
@@ -275,7 +279,14 @@ export class AppDatabase {
     errorDetails: row.error_details ? String(row.error_details) : null,
     createdAt: String(row.created_at),
     items: this.db
-      .prepare('select * from image_history where run_id = ? order by created_at asc')
+      .prepare(`
+        select * from image_history
+        where run_id = ?
+        order by
+          case when request_index is null then 1 else 0 end,
+          request_index asc,
+          created_at asc
+      `)
       .all(String(row.id))
       .map((historyRow) => this.historyFromRow(historyRow as Row))
   })
@@ -292,6 +303,7 @@ export class AppDatabase {
     requestIndex: row.request_index != null ? Number(row.request_index) : null,
     durationMs: row.duration_ms != null ? Number(row.duration_ms) : null,
     filePath: row.file_path ? String(row.file_path) : null,
+    fileSizeBytes: row.file_size_bytes != null ? Number(row.file_size_bytes) : this.getImageFileSize(row.file_path),
     status: row.status as ImageStatus,
     errorMessage: row.error_message ? String(row.error_message) : null,
     errorDetails: row.error_details ? String(row.error_details) : null,
@@ -303,5 +315,17 @@ export class AppDatabase {
     const resolved = resolve(filePath)
     const imagesRoot = resolve(this.imagesDir)
     if (resolved.startsWith(imagesRoot) && existsSync(resolved)) unlinkSync(resolved)
+  }
+
+  private getImageFileSize(filePath: unknown): number | null {
+    if (!filePath) return null
+    try {
+      const resolved = resolve(String(filePath))
+      if (!existsSync(resolved)) return null
+      const stat = statSync(resolved)
+      return stat.isFile() ? stat.size : null
+    } catch {
+      return null
+    }
   }
 }

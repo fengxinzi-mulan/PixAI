@@ -81,6 +81,7 @@ describe('image service progress', () => {
       await resultPromise
 
       expect(insertHistory.mock.calls[0][0].durationMs).toBe(42_300)
+      expect(insertHistory.mock.calls[0][0].fileSizeBytes).toBe(Buffer.byteLength('image'))
     } finally {
       globalThis.fetch = originalFetch
       dateNow.mockRestore()

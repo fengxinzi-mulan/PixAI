@@ -87,7 +87,7 @@ export class ImageService {
             }
 
             const id = randomUUID()
-            const filePath = await this.saveImage(id, image)
+            const savedImage = await this.saveImage(id, image)
             const durationMs = elapsedMs(startedAtMs)
             succeededCount += 1
             const item = this.database.insertHistory({
@@ -101,7 +101,8 @@ export class ImageService {
               quality: input.quality,
               requestIndex,
               durationMs,
-              filePath,
+              filePath: savedImage.filePath,
+              fileSizeBytes: savedImage.fileSizeBytes,
               status: 'succeeded',
               errorMessage: null,
               errorDetails: null,
@@ -192,12 +193,13 @@ export class ImageService {
     }
   }
 
-  private async saveImage(id: string, image: ImageResponseData): Promise<string> {
+  private async saveImage(id: string, image: ImageResponseData): Promise<{ filePath: string; fileSizeBytes: number }> {
     mkdirSync(this.database.imagesDir, { recursive: true })
     if (image.b64_json) {
       const filePath = join(this.database.imagesDir, `${id}.png`)
-      writeFileSync(filePath, Buffer.from(image.b64_json, 'base64'))
-      return filePath
+      const fileBuffer = Buffer.from(image.b64_json, 'base64')
+      writeFileSync(filePath, fileBuffer)
+      return { filePath, fileSizeBytes: fileBuffer.length }
     }
 
     if (image.url) {
@@ -207,8 +209,9 @@ export class ImageService {
       const urlPath = new URL(image.url).pathname
       const extension = extensionFromContentType(contentType) || extname(urlPath) || '.png'
       const filePath = join(this.database.imagesDir, `${id}${extension}`)
-      writeFileSync(filePath, Buffer.from(await response.arrayBuffer()))
-      return filePath
+      const fileBuffer = Buffer.from(await response.arrayBuffer())
+      writeFileSync(filePath, fileBuffer)
+      return { filePath, fileSizeBytes: fileBuffer.length }
     }
 
     throw new Error('The image API response did not include b64_json or url.')
@@ -286,6 +289,7 @@ export class ImageService {
       requestIndex: typeof details.requestIndex === 'number' ? details.requestIndex : null,
       durationMs,
       filePath: null,
+      fileSizeBytes: null,
       status: 'failed',
       errorMessage,
       errorDetails,

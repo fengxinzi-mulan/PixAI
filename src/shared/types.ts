@@ -42,6 +42,7 @@ export type ImageHistoryItem = {
   requestIndex: number | null
   durationMs: number | null
   filePath: string | null
+  fileSizeBytes: number | null
   status: ImageStatus
   errorMessage: string | null
   errorDetails: string | null

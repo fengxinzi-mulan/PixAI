@@ -17,19 +17,37 @@ export type PreviewMetadataRow = {
   value: string
 }
 
+export function formatFileSize(bytes: number): string {
+  const safe = Math.max(0, bytes)
+  if (safe < 1024) return `${safe} B`
+
+  const kilobytes = safe / 1024
+  if (kilobytes < 1024) return `${formatFileSizeNumber(kilobytes)} KB`
+
+  return `${formatFileSizeNumber(kilobytes / 1024)} MB`
+}
+
 export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataRow[] {
   const rows: PreviewMetadataRow[] = [
     { label: '用时', value: item.durationMs != null ? formatDuration(item.durationMs) : '未知' },
     { label: '比例', value: item.ratio },
-    { label: '质量', value: item.quality },
-    { label: '模型', value: item.model }
+    { label: '质量', value: item.quality }
   ]
 
   if (item.size) {
-    rows.splice(3, 0, { label: '尺寸', value: item.size })
+    rows.push({ label: '尺寸', value: item.size })
   }
 
+  if (item.fileSizeBytes != null) {
+    rows.push({ label: '大小', value: formatFileSize(item.fileSizeBytes) })
+  }
+
+  rows.push({ label: '模型', value: item.model })
   return rows
+}
+
+function formatFileSizeNumber(value: number): string {
+  return value >= 10 ? String(Math.round(value)) : value.toFixed(1)
 }
 
 export function clampPreviewZoom(zoom: number): number {

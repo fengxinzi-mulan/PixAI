@@ -12,6 +12,7 @@ const baseItem = {
   requestIndex: null,
   durationMs: 12345,
   filePath: null,
+  fileSizeBytes: null,
   status: 'succeeded' as const,
   errorMessage: null,
   errorDetails: null

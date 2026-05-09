@@ -11,9 +11,10 @@ export type WorkspaceSummarySegment = {
 export function getWorkspaceResultSummarySegments(items: ImageHistoryItem[], generatingCount: number): WorkspaceSummarySegment[] {
   const succeeded = items.filter((item) => item.status === 'succeeded').length
   const failed = items.filter((item) => item.status === 'failed').length
+  const total = items.length + generatingCount
 
   return [
-    { key: 'total', label: '共', value: items.length, suffix: '条', tone: 'total' },
+    { key: 'total', label: '共', value: total, suffix: '条', tone: 'total' },
     { key: 'succeeded', label: '成功', value: succeeded, tone: 'success' },
     { key: 'failed', label: '失败', value: failed, tone: 'danger' },
     { key: 'generating', label: '生成中', value: generatingCount, tone: 'active' }

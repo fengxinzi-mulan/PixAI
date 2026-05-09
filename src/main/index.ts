@@ -24,6 +24,10 @@ let database: AppDatabase
 let settings: SettingsStore
 let imageService: ImageService
 
+function getDataDir(): string {
+  return app.isPackaged ? app.getPath('userData') : join(process.cwd(), 'data')
+}
+
 function createWindow(): void {
   Menu.setApplicationMenu(null)
   mainWindow = new BrowserWindow(createMainWindowOptions())
@@ -91,8 +95,9 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
-  database = new AppDatabase(app.getPath('userData'))
-  settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
+  const dataDir = getDataDir()
+  database = new AppDatabase(dataDir)
+  settings = new SettingsStore(join(dataDir, 'settings.json'))
   imageService = new ImageService(database, settings)
   registerImageProtocol()
   registerIpc()

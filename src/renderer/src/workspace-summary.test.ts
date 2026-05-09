@@ -10,7 +10,7 @@ describe('workspace result summary', () => {
       { status: 'succeeded' }
     ] as ImageHistoryItem[]
 
-    expect(formatWorkspaceResultSummary(items, 2)).toBe('共 3 条 · 成功 2 · 失败 1 · 生成中 2')
+    expect(formatWorkspaceResultSummary(items, 2)).toBe('共 5 条 · 成功 2 · 失败 1 · 生成中 2')
   })
 
   it('shows zero counts when the workspace is empty', () => {
@@ -25,7 +25,7 @@ describe('workspace result summary', () => {
     ] as ImageHistoryItem[]
 
     expect(getWorkspaceResultSummarySegments(items, 2)).toEqual([
-      { key: 'total', label: '共', value: 3, suffix: '条', tone: 'total' },
+      { key: 'total', label: '共', value: 5, suffix: '条', tone: 'total' },
       { key: 'succeeded', label: '成功', value: 2, tone: 'success' },
       { key: 'failed', label: '失败', value: 1, tone: 'danger' },
       { key: 'generating', label: '生成中', value: 2, tone: 'active' }

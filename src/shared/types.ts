@@ -1,5 +1,9 @@
 export type ImageRatio = '1:1' | '3:2' | '2:3' | '4:3' | '3:4' | '16:9' | '9:16' | '21:9' | '9:21'
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
+export type ImageOutputFormat = 'png' | 'jpeg' | 'webp'
+export type ImageBackground = 'auto' | 'opaque'
+export type ImageModeration = 'auto' | 'low'
+export type ImageInputFidelity = 'low' | 'high'
 export type ImageStatus = 'succeeded' | 'failed'
 export type GenerationRunStatus = 'running' | ImageStatus
 export type GenerationMode = 'text-to-image' | 'image-to-image'
@@ -24,9 +28,22 @@ export type GenerateImageInput = {
   prompt: string
   model: string
   ratio: ImageRatio
+  size: string
   quality: ImageQuality
   n: number
+  outputFormat?: ImageOutputFormat
+  outputCompression?: number
+  background?: ImageBackground
+  moderation?: ImageModeration
+  stream?: boolean
+  partialImages?: number
+  inputFidelity?: ImageInputFidelity
   referenceImageIds?: string[]
+}
+
+export type PromptAssistInput = {
+  prompt?: string
+  hasReferenceImages?: boolean
 }
 
 export type Conversation = {
@@ -35,8 +52,16 @@ export type Conversation = {
   draftPrompt: string
   model: string
   ratio: ImageRatio
+  size: string
   quality: ImageQuality
   n: number
+  outputFormat: ImageOutputFormat
+  outputCompression: number | null
+  background: ImageBackground
+  moderation: ImageModeration
+  stream: boolean
+  partialImages: number | null
+  inputFidelity: ImageInputFidelity | null
   autoSaveHistory: boolean
   keepFailureDetails: boolean
   referenceImages: ReferenceImage[]
@@ -45,7 +70,45 @@ export type Conversation = {
 }
 
 export type ConversationUpdate = Partial<
-  Pick<Conversation, 'title' | 'draftPrompt' | 'model' | 'ratio' | 'quality' | 'n' | 'autoSaveHistory' | 'keepFailureDetails'>
+  Pick<
+    Conversation,
+    | 'title'
+    | 'draftPrompt'
+    | 'model'
+    | 'ratio'
+    | 'size'
+    | 'quality'
+    | 'n'
+    | 'outputFormat'
+    | 'outputCompression'
+    | 'background'
+    | 'moderation'
+    | 'stream'
+    | 'partialImages'
+    | 'inputFidelity'
+    | 'autoSaveHistory'
+    | 'keepFailureDetails'
+  >
+>
+
+export type ConversationCreateInput = Partial<
+  Pick<
+    Conversation,
+    | 'model'
+    | 'ratio'
+    | 'size'
+    | 'quality'
+    | 'n'
+    | 'outputFormat'
+    | 'outputCompression'
+    | 'background'
+    | 'moderation'
+    | 'stream'
+    | 'partialImages'
+    | 'inputFidelity'
+    | 'autoSaveHistory'
+    | 'keepFailureDetails'
+  >
 >
 
 export type ImageHistoryItem = {
@@ -93,6 +156,7 @@ export type ProviderSettings = {
   baseURL: string
   apiKeyStored: boolean
   defaultModel: string
+  promptModel: string
   insecureStorage: boolean
 }
 
@@ -100,6 +164,7 @@ export type ProviderSettingsUpdate = {
   baseURL?: string
   apiKey?: string | null
   defaultModel?: string
+  promptModel?: string
 }
 
 export type GenerateImageResult = {
@@ -123,17 +188,21 @@ export type PixAIAPI = {
   }
   conversation: {
     list: () => Promise<Conversation[]>
-    create: () => Promise<Conversation>
+    create: (input?: ConversationCreateInput) => Promise<Conversation>
     update: (id: string, input: ConversationUpdate) => Promise<Conversation>
     delete: (id: string) => Promise<void>
     runs: (id: string) => Promise<GenerationRun[]>
   }
   image: {
     generate: (input: GenerateImageInput) => Promise<GenerateImageResult>
-    cancel: (conversationId: string, requestIndex?: number) => Promise<void>
+    cancel: (runId: string, requestIndex?: number) => Promise<void>
     url: (id: string) => string
     copy: (id: string) => Promise<void>
     download: (id: string) => Promise<string | null>
+  }
+  prompt: {
+    inspire: (input?: PromptAssistInput) => Promise<string>
+    enrich: (input: PromptAssistInput & { prompt: string }) => Promise<string>
   }
   reference: {
     importFiles: (conversationId: string, files: ReferenceImageImportFile[]) => Promise<ReferenceImage[]>

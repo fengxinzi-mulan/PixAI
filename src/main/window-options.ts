@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { app } from 'electron'
 import type { BrowserWindowConstructorOptions } from 'electron'
 
 export function createMainWindowOptions(): BrowserWindowConstructorOptions {
@@ -8,6 +9,7 @@ export function createMainWindowOptions(): BrowserWindowConstructorOptions {
     minWidth: 1120,
     minHeight: 760,
     title: 'PixAI',
+    icon: resolveWindowIconPath(),
     backgroundColor: '#f5f8f6',
     autoHideMenuBar: true,
     webPreferences: {
@@ -17,4 +19,11 @@ export function createMainWindowOptions(): BrowserWindowConstructorOptions {
       sandbox: false
     }
   }
+}
+
+function resolveWindowIconPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'icon.ico')
+  }
+  return join(process.cwd(), 'src/renderer/src/assets/icon.ico')
 }

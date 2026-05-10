@@ -8,17 +8,22 @@ function App(): JSX.Element {
   const activeConversationId = useAppStore((state) => state.activeConversationId)
   const generatingByConversation = useAppStore((state) => state.generatingByConversation)
   const generationStartedAtByConversation = useAppStore((state) => state.generationStartedAtByConversation)
-  const removedGenerationIndexesByConversation = useAppStore((state) => state.removedGenerationIndexesByConversation)
+  const runsByConversation = useAppStore((state) => state.runsByConversation)
   const generationClockMs = useAppStore((state) => state.generationClockMs)
   const load = useAppStore((state) => state.load)
   const toast = useAppStore((state) => state.toast)
+  const activeRuns = activeConversationId ? runsByConversation[activeConversationId] || [] : []
+  const runningRunStartedAt = activeRuns
+    .filter((run) => run.status === 'running')
+    .map((run) => Date.parse(run.createdAt))
+    .filter((time) => Number.isFinite(time))
+    .sort((left, right) => left - right)[0] ?? null
   const activeGenerationState = activeConversationId
     ? {
-        generating: Boolean(generatingByConversation[activeConversationId]),
-        startedAt: generationStartedAtByConversation[activeConversationId] ?? null,
-        removedIndexes: removedGenerationIndexesByConversation[activeConversationId] ?? []
+        generating: Boolean(generatingByConversation[activeConversationId]) || activeRuns.some((run) => run.status === 'running'),
+        startedAt: generationStartedAtByConversation[activeConversationId] ?? runningRunStartedAt
       }
-    : { generating: false, startedAt: null, removedIndexes: [] }
+    : { generating: false, startedAt: null }
 
   useEffect(() => {
     void load()
@@ -32,7 +37,6 @@ function App(): JSX.Element {
           <MainLayout
             activeConversationGenerating={activeGenerationState.generating}
             activeConversationStartedAt={activeGenerationState.startedAt}
-            activeConversationRemovedIndexes={activeGenerationState.removedIndexes}
             generationClockMs={generationClockMs}
           />
         </div>

@@ -3,6 +3,7 @@ import { Check, Copy, Download, Heart, RotateCcw, SquarePen, Trash2 } from 'luci
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 import { PreviewModal } from '@renderer/components/preview/PreviewModal'
+import { ErrorDetailsModal } from './ErrorDetailsModal'
 
 export function ImageTile({
   item,
@@ -23,6 +24,7 @@ export function ImageTile({
 }): JSX.Element {
   const { addHistoryAsReference, deleteHistory, toggleFavorite, reuseHistory, notify } = useAppStore()
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false)
   const tileRef = useRef<HTMLElement | null>(null)
   const [lockedHeight, setLockedHeight] = useState<number | null>(null)
   const src = useMemo(() => (item.status === 'succeeded' ? window.pixai.image.url(item.id) : ''), [item.id, item.status])
@@ -72,14 +74,14 @@ export function ImageTile({
         ref={tileRef}
         className={tileClassName}
         style={tileStyle}
-        role={selectable ? 'button' : undefined}
-        tabIndex={selectable ? 0 : undefined}
-        onClick={selectable ? openPreview : undefined}
+        role="button"
+        tabIndex={0}
+        title="点击查看错误详情"
+        onClick={() => setErrorDetailsOpen(true)}
         onKeyDown={(event) => {
-          if (!selectable) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            openPreview()
+            setErrorDetailsOpen(true)
           }
         }}
       >
@@ -97,8 +99,8 @@ export function ImageTile({
         </div>
         <div className="fail-content">
           <strong>{item.errorMessage || '生成失败'}</strong>
-          {item.errorDetails ? <details><summary>查看错误详情</summary><code>{item.errorDetails}</code></details> : null}
         </div>
+        {errorDetailsOpen ? <ErrorDetailsModal item={item} onClose={() => setErrorDetailsOpen(false)} /> : null}
       </article>
     )
   }

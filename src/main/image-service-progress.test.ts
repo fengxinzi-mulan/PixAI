@@ -71,6 +71,7 @@ describe('image service progress', () => {
         prompt: 'prompt',
         model: 'gpt-image-2',
         ratio: '1:1',
+        size: '1024x1024',
         quality: 'auto',
         n: 1
       })
@@ -138,6 +139,7 @@ describe('image service progress', () => {
         prompt: 'prompt',
         model: 'gpt-image-2',
         ratio: '1:1',
+        size: '1024x1024',
         quality: 'auto',
         n: 2
       })
@@ -154,6 +156,64 @@ describe('image service progress', () => {
       expect(insertHistory).toHaveBeenCalledTimes(2)
       expect(insertHistory.mock.calls.map(([input]) => input.requestIndex)).toEqual([0, 1])
       expect(insertHistory.mock.calls.every(([input]) => input.durationMs >= 0)).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('saves base64 images with the requested output format extension', async () => {
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('image').toString('base64') }]
+      }), { status: 200 }))
+    ) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      await imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        outputFormat: 'jpeg'
+      })
+
+      expect(insertHistory.mock.calls[0][0].filePath).toMatch(/\.jpg$/)
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -206,6 +266,7 @@ describe('image service progress', () => {
         prompt: 'prompt',
         model: 'gpt-image-2',
         ratio: '1:1',
+        size: '1024x1024',
         quality: 'auto',
         n: 1
       })
@@ -279,8 +340,16 @@ describe('image service progress', () => {
         prompt: 'prompt',
         model: 'gpt-image-2',
         ratio: '1:1',
+        size: '1024x1024',
         quality: 'auto',
         n: 1,
+        outputFormat: 'jpeg',
+        outputCompression: 85,
+        background: 'opaque',
+        moderation: 'low',
+        stream: true,
+        partialImages: 2,
+        inputFidelity: 'high',
         referenceImageIds: [reference.id]
       })
 
@@ -294,6 +363,13 @@ describe('image service progress', () => {
       expect(body.get('size')).toBe('1024x1024')
       expect(body.get('quality')).toBe('auto')
       expect(body.get('n')).toBe('1')
+      expect(body.get('output_format')).toBe('jpeg')
+      expect(body.get('output_compression')).toBe('85')
+      expect(body.get('background')).toBe('opaque')
+      expect(body.get('moderation')).toBe('low')
+      expect(body.get('stream')).toBe('true')
+      expect(body.get('partial_images')).toBe('2')
+      expect(body.get('input_fidelity')).toBeNull()
       expect(body.getAll('image[]')).toHaveLength(1)
       expect(insertRunReferences).toHaveBeenCalledWith(run.id, [reference])
     } finally {

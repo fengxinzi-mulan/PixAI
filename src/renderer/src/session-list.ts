@@ -1,7 +1,7 @@
 export function getSessionRowView(
   conversationId: string,
   activeConversationId: string | null,
-  generatingByConversation: Record<string, boolean>
+  generatingByConversation: Record<string, number>
 ): { className: string; generating: boolean } {
   const active = conversationId === activeConversationId
   const generating = Boolean(generatingByConversation[conversationId])

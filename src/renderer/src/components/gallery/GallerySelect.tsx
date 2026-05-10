@@ -21,7 +21,15 @@ export function GallerySelect<T extends string | number>({
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const previousValueRef = useRef(value)
   const selectedOption = options.find((option) => option.value === value) || options[0]
+
+  useEffect(() => {
+    if (open && previousValueRef.current !== value) {
+      setOpen(false)
+    }
+    previousValueRef.current = value
+  }, [open, value])
 
   useEffect(() => {
     if (!open) return

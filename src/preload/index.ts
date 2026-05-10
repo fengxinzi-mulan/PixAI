@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ConversationCreateInput,
   ConversationUpdate,
   GenerateImageInput,
   HistoryListOptions,
   PixAIAPI,
+  PromptAssistInput,
   ProviderSettingsUpdate,
   ReferenceImageImportFile
 } from '@shared/types'
@@ -15,17 +17,21 @@ const api: PixAIAPI = {
   },
   conversation: {
     list: () => ipcRenderer.invoke('conversation:list'),
-    create: () => ipcRenderer.invoke('conversation:create'),
+    create: (input?: ConversationCreateInput) => ipcRenderer.invoke('conversation:create', input),
     update: (id: string, input: ConversationUpdate) => ipcRenderer.invoke('conversation:update', id, input),
     delete: (id: string) => ipcRenderer.invoke('conversation:delete', id),
     runs: (id: string) => ipcRenderer.invoke('conversation:runs', id)
   },
   image: {
     generate: (input: GenerateImageInput) => ipcRenderer.invoke('image:generate', input),
-    cancel: (conversationId: string, requestIndex?: number) => ipcRenderer.invoke('image:cancel', conversationId, requestIndex),
+    cancel: (runId: string, requestIndex?: number) => ipcRenderer.invoke('image:cancel', runId, requestIndex),
     url: (id: string) => `pixai-image://image/${encodeURIComponent(id)}`,
     copy: (id: string) => ipcRenderer.invoke('image:copy', id),
     download: (id: string) => ipcRenderer.invoke('image:download', id)
+  },
+  prompt: {
+    inspire: (input?: PromptAssistInput) => ipcRenderer.invoke('prompt:inspire', input),
+    enrich: (input: PromptAssistInput & { prompt: string }) => ipcRenderer.invoke('prompt:enrich', input)
   },
   history: {
     list: (options?: HistoryListOptions) => ipcRenderer.invoke('history:list', options),

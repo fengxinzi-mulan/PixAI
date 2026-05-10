@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type JSX, type SyntheticEvent, type WheelEvent } from 'react'
-import { ChevronLeft, ChevronRight, Copy, Download, RotateCcw, SquarePen, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type JSX, type PointerEvent, type SyntheticEvent, type WheelEvent } from 'react'
+import { ChevronLeft, ChevronRight, Copy, Download, Heart, Maximize2, Minimize2, RotateCcw, SquarePen, X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 import { ReferencePreviewModal } from './ReferencePreviewModal'
 import {
   clampPreviewZoom,
+  formatPreviewPanTransform,
   formatPreviewZoom,
   getInitialPreviewZoom,
   getInitialPreviewZoomForArea,
@@ -34,13 +35,18 @@ export function PreviewModal({
   items: ImageHistoryItem[]
   onClose: () => void
 }): JSX.Element {
-  const { addHistoryAsReference, notify } = useAppStore()
+  const { addHistoryAsReference, toggleFavorite, notify } = useAppStore()
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const artRef = useRef<HTMLDivElement | null>(null)
   const [currentId, setCurrentId] = useState(initialItem.id)
   const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [dragStart, setDragStart] = useState<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const [previewReferenceId, setPreviewReferenceId] = useState<string | null>(null)
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null)
   const [artSize, setArtSize] = useState<{ width: number; height: number } | null>(null)
+  const [favorite, setFavorite] = useState(initialItem.favorite)
   const currentIndex = Math.max(0, items.findIndex((item) => item.id === currentId))
   const item = items[currentIndex] || initialItem
   const src = useMemo(() => window.pixai.image.url(item.id), [item.id])
@@ -49,8 +55,14 @@ export function PreviewModal({
   const canGoNext = currentIndex < items.length - 1
 
   useEffect(() => {
+    setFavorite(item.favorite)
+  }, [item.favorite, item.id])
+
+  useEffect(() => {
     setZoom(1)
     setImageSize(null)
+    setPan({ x: 0, y: 0 })
+    setDragStart(null)
   }, [item.id])
 
   useEffect(() => {
@@ -72,7 +84,10 @@ export function PreviewModal({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        if (document.fullscreenElement) return
+        onClose()
+      }
       if (event.key === 'ArrowLeft' && canGoPrevious) setCurrentId(items[currentIndex - 1].id)
       if (event.key === 'ArrowRight' && canGoNext) setCurrentId(items[currentIndex + 1].id)
     }
@@ -83,11 +98,42 @@ export function PreviewModal({
   useEffect(() => {
     if (!imageSize) return
     setZoom(getPreviewFitZoom(imageSize, artSize))
+    setPan({ x: 0, y: 0 })
   }, [artSize, imageSize])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === panelRef.current)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
     setZoom((value) => getPreviewZoomAfterWheel(value, event.deltaY))
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDragStart({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y })
+  }
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!dragStart || dragStart.pointerId !== event.pointerId) return
+    event.preventDefault()
+    setPan({
+      x: dragStart.panX + event.clientX - dragStart.x,
+      y: dragStart.panY + event.clientY - dragStart.y
+    })
+  }
+
+  const handlePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    if (dragStart?.pointerId === event.pointerId) {
+      setDragStart(null)
+    }
   }
 
   const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
@@ -95,6 +141,7 @@ export function PreviewModal({
     const nextImageSize = { width: target.naturalWidth, height: target.naturalHeight }
     setImageSize(nextImageSize)
     setZoom(getPreviewFitZoom(nextImageSize, artSize))
+    setPan({ x: 0, y: 0 })
   }
 
   const copyPrompt = async () => {
@@ -107,13 +154,36 @@ export function PreviewModal({
     onClose()
   }
 
+  const handleToggleFavorite = async () => {
+    const nextFavorite = !favorite
+    setFavorite(nextFavorite)
+    try {
+      await toggleFavorite(item)
+    } catch (error) {
+      setFavorite(!nextFavorite)
+      notify(error instanceof Error ? `收藏失败：${error.message}` : '收藏失败')
+    }
+  }
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await panelRef.current?.requestFullscreen()
+      }
+    } catch (error) {
+      notify(error instanceof Error ? `全屏切换失败：${error.message}` : '全屏切换失败')
+    }
+  }
+
   return (
     <div
       className="modal open"
       onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="modal-panel">
+      <div className="modal-panel" ref={panelRef}>
         <div className="modal-head">
           <span>图片预览</span>
           <div className="mini-controls">
@@ -124,14 +194,26 @@ export function PreviewModal({
             <button title="放大" onClick={() => setZoom((value) => clampPreviewZoom(value + 0.15))}>
               <ZoomIn size={15} />
             </button>
-            <button title="重置缩放" onClick={() => setZoom(imageSize ? getPreviewFitZoom(imageSize, artSize) : 1)}>
+            <button
+              title="重置缩放"
+              onClick={() => {
+                setZoom(imageSize ? getPreviewFitZoom(imageSize, artSize) : 1)
+                setPan({ x: 0, y: 0 })
+              }}
+            >
               <RotateCcw size={15} />
+            </button>
+            <button title={fullscreen ? '退出全屏' : '全屏显示'} onClick={() => void toggleFullscreen()}>
+              {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
             <button title="复制图片" onClick={() => void window.pixai.image.copy(item.id).then(() => notify('已复制到剪贴板'))}>
               <Copy size={15} />
             </button>
             <button title="下载图片" onClick={() => void window.pixai.image.download(item.id).then((path) => path && notify('已保存图片'))}>
               <Download size={15} />
+            </button>
+            <button title={favorite ? '取消收藏' : '收藏'} onClick={() => void handleToggleFavorite()}>
+              <Heart className={favorite ? 'filled' : ''} size={15} />
             </button>
             <button title="编辑" onClick={() => void editImage()}>
               <SquarePen size={14} />
@@ -151,12 +233,23 @@ export function PreviewModal({
             >
               <ChevronLeft size={24} />
             </button>
-            <img
-              src={src}
-              alt={item.prompt}
-              onLoad={handleImageLoad}
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
-            />
+            <div
+              className={`modal-image-stage ${dragStart ? 'dragging' : ''}`}
+              style={{ transform: formatPreviewPanTransform(pan) }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+              onLostPointerCapture={handlePointerEnd}
+            >
+              <img
+                draggable={false}
+                src={src}
+                alt={item.prompt}
+                onLoad={handleImageLoad}
+                style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+              />
+            </div>
             <button
               className="modal-nav next"
               disabled={!canGoNext}

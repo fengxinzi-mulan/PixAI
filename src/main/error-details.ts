@@ -16,10 +16,20 @@ export function createErrorDetails(
       conversationId: input.conversationId,
       model: input.model,
       ratio: input.ratio,
+      size: input.size,
       quality: input.quality,
       n: input.n,
+      outputFormat: input.outputFormat ?? null,
+      outputCompression: input.outputCompression ?? null,
+      background: input.background ?? null,
+      moderation: input.moderation ?? null,
+      stream: Boolean(input.stream),
+      partialImages: input.partialImages ?? null,
+      inputFidelity: input.inputFidelity ?? null,
+      referenceImageIds: input.referenceImageIds ?? [],
       promptLength: input.prompt.length,
-      promptPreview: input.prompt.slice(0, 300)
+      promptPreview: input.prompt.slice(0, 300),
+      referenceImageCount: input.referenceImageIds?.length || 0
     },
     details
   }

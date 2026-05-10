@@ -2,11 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { safeStorage } from 'electron'
 import { DEFAULT_MODEL } from '@shared/image-options'
+import { DEFAULT_PROMPT_MODEL } from '@shared/prompt-options'
 import type { ProviderSettings, ProviderSettingsUpdate } from '@shared/types'
 
 type SettingsFile = {
   baseURL: string
   defaultModel: string
+  promptModel: string
   encryptedApiKey?: string
   plainApiKey?: string
   insecureStorage?: boolean
@@ -15,6 +17,7 @@ type SettingsFile = {
 const defaultSettings: SettingsFile = {
   baseURL: 'https://api.openai.com',
   defaultModel: DEFAULT_MODEL,
+  promptModel: DEFAULT_PROMPT_MODEL,
   insecureStorage: false
 }
 
@@ -28,6 +31,7 @@ export class SettingsStore {
     return {
       baseURL: settings.baseURL,
       defaultModel: settings.defaultModel,
+      promptModel: settings.promptModel,
       apiKeyStored: Boolean(settings.encryptedApiKey || settings.plainApiKey),
       insecureStorage: Boolean(settings.insecureStorage)
     }
@@ -46,7 +50,8 @@ export class SettingsStore {
     const next: SettingsFile = {
       ...current,
       ...(input.baseURL !== undefined ? { baseURL: input.baseURL.trim().replace(/\/+$/, '') || defaultSettings.baseURL } : {}),
-      ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel.trim() || DEFAULT_MODEL } : {})
+      ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel.trim() || DEFAULT_MODEL } : {}),
+      ...(input.promptModel !== undefined ? { promptModel: input.promptModel.trim() || DEFAULT_PROMPT_MODEL } : {})
     }
 
     if (input.apiKey !== undefined) {

@@ -1,6 +1,6 @@
 {
   "name": "pixai",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "PixAI Windows desktop image generation app.",
   "main": "./out/main/index.js",
   "author": "PixAI",
@@ -45,10 +45,17 @@
       "out/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "src/renderer/src/assets/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
     "asarUnpack": [
       "**/*.node"
     ],
     "win": {
+      "icon": "src/renderer/src/assets/icon.ico",
       "signAndEditExecutable": false,
       "target": [
         {

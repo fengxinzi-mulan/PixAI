@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import { ArrowLeft, Image as ImageIcon, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
 import { useAppStore } from '@renderer/store/app-store'
+import logoUrl from '@renderer/assets/icon.png'
 
 export function Topbar(): JSX.Element {
   const { settings, settingsVisible, view, setView, toggleSettings, createConversation } = useAppStore()
@@ -10,7 +11,7 @@ export function Topbar(): JSX.Element {
     <header className="topbar">
       <div className="brand">
         <div className="logo">
-          <ImageIcon size={18} />
+          <img src={logoUrl} alt="PixAI" />
         </div>
         <div>
           <h1>PixAI</h1>

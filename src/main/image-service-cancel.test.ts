@@ -24,10 +24,10 @@ describe('image service cancellation', () => {
     )
 
     const activeRequests = new Map<string, Array<{ controller: AbortController }>>()
-    activeRequests.set('c1', [{ controller: { abort: abortSpy } as unknown as AbortController }])
+    activeRequests.set('run-1', [{ controller: { abort: abortSpy } as unknown as AbortController }])
     ;(imageService as unknown as { activeRequests: Map<string, Array<{ controller: AbortController }>> }).activeRequests = activeRequests
 
-    imageService.cancelConversationGeneration('c1')
+    imageService.cancelRunGeneration('run-1')
 
     expect(abortSpy).toHaveBeenCalledTimes(1)
   })
@@ -52,13 +52,13 @@ describe('image service cancellation', () => {
     )
 
     const activeRequests = new Map<string, Array<{ controller: AbortController }>>()
-    activeRequests.set('c1', [
+    activeRequests.set('run-1', [
       { controller: { abort: abortFirst } as unknown as AbortController },
       { controller: { abort: abortSecond } as unknown as AbortController }
     ])
     ;(imageService as unknown as { activeRequests: Map<string, Array<{ controller: AbortController }>> }).activeRequests = activeRequests
 
-    imageService.cancelConversationGeneration('c1')
+    imageService.cancelRunGeneration('run-1')
 
     expect(abortFirst).not.toHaveBeenCalled()
     expect(abortSecond).not.toHaveBeenCalled()
@@ -85,18 +85,48 @@ describe('image service cancellation', () => {
     )
 
     const activeRequests = new Map<string, Array<{ controller: AbortController }>>()
-    activeRequests.set('c1', [
+    activeRequests.set('run-1', [
       { controller: { abort: abortFirst } as unknown as AbortController },
       { controller: { abort: abortSecond } as unknown as AbortController },
       { controller: { abort: abortThird } as unknown as AbortController }
     ])
     ;(imageService as unknown as { activeRequests: Map<string, Array<{ controller: AbortController }>> }).activeRequests = activeRequests
 
-    imageService.cancelConversationGeneration('c1', 1)
+    imageService.cancelRunGeneration('run-1', 1)
 
     expect(abortFirst).not.toHaveBeenCalled()
     expect(abortSecond).toHaveBeenCalledTimes(1)
     expect(abortThird).not.toHaveBeenCalled()
+  })
+
+  it('does not cancel requests from a different run', async () => {
+    const abortFirstRun = vi.fn()
+    const abortSecondRun = vi.fn()
+    const imageService = new ImageService(
+      {
+        getConversation: () => ({
+          autoSaveHistory: true
+        }),
+        insertRun: (input: unknown) => input,
+        insertHistory: vi.fn(),
+        updateRun: vi.fn(),
+        imagesDir: 'ignored'
+      } as never,
+      {
+        getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+        getApiKey: () => 'sk-test'
+      } as never
+    )
+
+    const activeRequests = new Map<string, Array<{ controller: AbortController }>>()
+    activeRequests.set('run-1', [{ controller: { abort: abortFirstRun } as unknown as AbortController }])
+    activeRequests.set('run-2', [{ controller: { abort: abortSecondRun } as unknown as AbortController }])
+    ;(imageService as unknown as { activeRequests: Map<string, Array<{ controller: AbortController }>> }).activeRequests = activeRequests
+
+    imageService.cancelRunGeneration('run-1', 0)
+
+    expect(abortFirstRun).toHaveBeenCalledTimes(1)
+    expect(abortSecondRun).not.toHaveBeenCalled()
   })
 
   it('skips the canceled item and keeps the other generated images when canceling a single request', async () => {
@@ -159,12 +189,13 @@ describe('image service cancellation', () => {
         prompt: 'prompt',
         model: 'gpt-image-2',
         ratio: '1:1',
+        size: '1024x1024',
         quality: 'auto',
         n: 3
       })
       await Promise.resolve()
 
-      imageService.cancelConversationGeneration('c1', 1)
+      imageService.cancelRunGeneration(run.id, 1)
       const result = await resultPromise
 
       expect(result.items).toHaveLength(2)

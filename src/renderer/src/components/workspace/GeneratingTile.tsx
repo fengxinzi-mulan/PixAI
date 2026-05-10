@@ -4,12 +4,12 @@ import { formatDuration } from '@shared/duration'
 import { useAppStore } from '@renderer/store/app-store'
 
 export function GeneratingTile({
-  conversationId,
+  runId,
   requestIndex,
   generationElapsedMs
 }: {
-  conversationId: string
-  requestIndex: number
+  runId?: string
+  requestIndex?: number
   generationElapsedMs: number | null
 }): JSX.Element {
   const { cancelGeneration } = useAppStore()
@@ -27,13 +27,13 @@ export function GeneratingTile({
       <span className="generating-label">生成中</span>
       <div className="generating-meta">
         <span>{`已耗时 ${elapsedText}`}</span>
-        {hovered ? (
+        {hovered && runId && typeof requestIndex === 'number' ? (
           <button
             type="button"
             className="cancel-chip"
             onClick={(event) => {
               event.stopPropagation()
-              void cancelGeneration(conversationId, requestIndex)
+              void cancelGeneration(runId, requestIndex)
             }}
           >
             取消

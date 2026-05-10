@@ -6,12 +6,10 @@ import { Composer } from './Composer'
 export function Workspace({
   activeConversationGenerating,
   activeConversationStartedAt,
-  activeConversationRemovedIndexes,
   generationClockMs
 }: {
   activeConversationGenerating: boolean
   activeConversationStartedAt: number | null
-  activeConversationRemovedIndexes: number[]
   generationClockMs: number
 }): JSX.Element {
   const { conversations, activeConversationId, runsByConversation } = useAppStore()
@@ -27,7 +25,6 @@ export function Workspace({
             runs={runs}
             generationStartedAt={activeConversationStartedAt}
             generating={activeConversationGenerating}
-            removedIndexes={activeConversationRemovedIndexes}
             generationClockMs={generationClockMs}
           />
         </>

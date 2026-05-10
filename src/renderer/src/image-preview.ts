@@ -18,6 +18,11 @@ export type PreviewMetadataRow = {
   value: string
 }
 
+export type PreviewPan = {
+  x: number
+  y: number
+}
+
 export function formatFileSize(bytes: number): string {
   const safe = Math.max(0, bytes)
   if (safe < 1024) return `${safe} B`
@@ -31,6 +36,7 @@ export function formatFileSize(bytes: number): string {
 export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataRow[] {
   const rows: PreviewMetadataRow[] = [
     { label: '类型', value: item.generationMode === 'image-to-image' ? '图生图' : '文生图' },
+    { label: '生成时间', value: formatGeneratedAt(item.createdAt) },
     { label: '用时', value: item.durationMs != null ? formatDuration(item.durationMs) : '未知' },
     { label: '比例', value: item.ratio },
     { label: '质量', value: formatImageQuality(item.quality) }
@@ -38,6 +44,11 @@ export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataR
 
   if (item.size) {
     rows.push({ label: '尺寸', value: item.size })
+  }
+
+  const format = formatImageFileFormat(item.filePath)
+  if (format) {
+    rows.push({ label: '格式', value: format })
   }
 
   if (item.fileSizeBytes != null) {
@@ -48,8 +59,32 @@ export function getPreviewMetadataRows(item: ImageHistoryItem): PreviewMetadataR
   return rows
 }
 
+export function formatGeneratedAt(value: string | null | undefined): string {
+  return formatLocalDateTime(value)
+}
+
+export function formatLocalDateTime(value: string | null | undefined, includeSeconds = true): string {
+  if (!value) return '未知'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未知'
+  const year = date.getFullYear()
+  const month = padDatePart(date.getMonth() + 1)
+  const day = padDatePart(date.getDate())
+  const hours = padDatePart(date.getHours())
+  const minutes = padDatePart(date.getMinutes())
+  if (!includeSeconds) {
+    return `${year}-${month}-${day} ${hours}:${minutes}`
+  }
+  const seconds = padDatePart(date.getSeconds())
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
 function formatFileSizeNumber(value: number): string {
   return value >= 10 ? String(Math.round(value)) : value.toFixed(1)
+}
+
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0')
 }
 
 export function clampPreviewZoom(zoom: number): number {
@@ -100,4 +135,18 @@ export function getPreviewZoomAfterWheel(zoom: number, deltaY: number): number {
 
 export function formatPreviewZoom(zoom: number): string {
   return `${Math.round(zoom * 100)}%`
+}
+
+export function formatPreviewPanTransform(pan: PreviewPan): string {
+  return `translate(${Math.round(pan.x)}px, ${Math.round(pan.y)}px)`
+}
+
+function formatImageFileFormat(filePath: string | null): string | null {
+  if (!filePath) return null
+  const extension = filePath.slice(filePath.lastIndexOf('.') + 1).toLowerCase()
+  if (!extension) return null
+  if (extension === 'jpg' || extension === 'jpeg') return 'JPEG'
+  if (extension === 'png') return 'PNG'
+  if (extension === 'webp') return 'WebP'
+  return extension.toUpperCase()
 }

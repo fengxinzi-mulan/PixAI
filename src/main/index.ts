@@ -2,10 +2,18 @@ import { copyFileSync, existsSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell } from 'electron'
-import type { GenerateImageInput, HistoryListOptions, ProviderSettingsUpdate, ReferenceImageImportFile } from '@shared/types'
+import type {
+  ConversationCreateInput,
+  GenerateImageInput,
+  HistoryListOptions,
+  PromptAssistInput,
+  ProviderSettingsUpdate,
+  ReferenceImageImportFile
+} from '@shared/types'
 import { AppDatabase } from './database'
 import { resolveDataDir } from './data-path'
 import { ImageService } from './image-service'
+import { PromptService } from './prompt-service'
 import { SettingsStore } from './settings'
 import { createMainWindowOptions } from './window-options'
 
@@ -24,6 +32,7 @@ let mainWindow: BrowserWindow | null = null
 let database: AppDatabase
 let settings: SettingsStore
 let imageService: ImageService
+let promptService: PromptService
 
 function getDataDir(): string {
   return resolveDataDir({ cwd: process.cwd(), packaged: app.isPackaged, exePath: app.getPath('exe') })
@@ -59,7 +68,7 @@ function registerIpc(): void {
   ipcMain.handle('settings:update', (_event, input: ProviderSettingsUpdate) => settings.update(input))
 
   ipcMain.handle('conversation:list', () => database.listConversations())
-  ipcMain.handle('conversation:create', () => database.createConversation())
+  ipcMain.handle('conversation:create', (_event, input?: ConversationCreateInput) => database.createConversation(input))
   ipcMain.handle('conversation:update', (_event, id: string, input) => database.updateConversation(id, input))
   ipcMain.handle('conversation:delete', (_event, id: string) => database.deleteConversation(id))
   ipcMain.handle('conversation:runs', (_event, id: string) => database.listRuns(id))
@@ -69,8 +78,8 @@ function registerIpc(): void {
   ipcMain.handle('history:favorite', (_event, id: string, favorite: boolean) => database.setFavorite(id, favorite))
 
   ipcMain.handle('image:generate', (_event, input: GenerateImageInput) => imageService.generate(input))
-  ipcMain.handle('image:cancel', (_event, conversationId: string, requestIndex?: number) =>
-    imageService.cancelConversationGeneration(conversationId, requestIndex))
+  ipcMain.handle('image:cancel', (_event, runId: string, requestIndex?: number) =>
+    imageService.cancelRunGeneration(runId, requestIndex))
   ipcMain.handle('image:url', (_event, id: string) => `pixai-image://image/${encodeURIComponent(id)}`)
   ipcMain.handle('image:copy', (_event, id: string) => {
     const item = database.getHistory(id)
@@ -92,6 +101,8 @@ function registerIpc(): void {
     copyFileSync(item.filePath, result.filePath)
     return result.filePath
   })
+  ipcMain.handle('prompt:inspire', (_event, input?: PromptAssistInput) => promptService.inspire(input))
+  ipcMain.handle('prompt:enrich', (_event, input: PromptAssistInput & { prompt: string }) => promptService.enrich(input))
   ipcMain.handle('reference:import-files', (_event, conversationId: string, files: ReferenceImageImportFile[]) => {
     for (const file of files) {
       database.createReferenceImageFromBytes({ conversationId, ...file })
@@ -116,6 +127,7 @@ app.whenReady().then(() => {
   database = new AppDatabase(dataDir)
   settings = new SettingsStore(join(dataDir, 'settings.json'))
   imageService = new ImageService(database, settings)
+  promptService = new PromptService(settings)
   registerImageProtocol()
   registerIpc()
   createWindow()

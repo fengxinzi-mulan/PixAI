@@ -1,11 +1,21 @@
 import { useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type JSX } from 'react'
-import { GripVertical, ImagePlus, Loader2, Sparkles, Trash2, Wand2, X } from 'lucide-react'
+import { GripVertical, ImagePlus, Lightbulb, Sparkles, Trash2, Wand2, X } from 'lucide-react'
 import type { Conversation } from '@shared/types'
+import { formatImageSize } from '@shared/image-options'
 import { useAppStore } from '@renderer/store/app-store'
 import { ReferencePreviewModal } from '@renderer/components/preview/ReferencePreviewModal'
 
 export function Composer({ conversation, generating }: { conversation: Conversation; generating: boolean }): JSX.Element {
-  const { updateActiveConversation, generate, importReferenceFiles, removeReferenceImage, reorderReferenceImages } = useAppStore()
+  const {
+    updateActiveConversation,
+    generate,
+    importReferenceFiles,
+    removeReferenceImage,
+    reorderReferenceImages,
+    inspirePrompt,
+    enrichPrompt,
+    promptAssistantRunning
+  } = useAppStore()
   const promptRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const draggedReferenceIdRef = useRef<string | null>(null)
@@ -93,12 +103,33 @@ export function Composer({ conversation, generating }: { conversation: Conversat
             <Sparkles size={13} />
             {referenceCount > 0 ? `图生图 · ${referenceCount} 张参考图` : '文生图'}
           </span>
+          <span className="pill blue">{formatImageSize(conversation.size)}</span>
           <span className="pill">已保存</span>
         </div>
-        <button className="clear-prompt-button" type="button" onClick={() => void clearComposer()}>
-          <X size={15} />
-          <span>清空</span>
-        </button>
+        <div className="composer-actions">
+          <button
+            type="button"
+            className="prompt-assist-button"
+            disabled={promptAssistantRunning.inspire}
+            onClick={() => void inspirePrompt()}
+          >
+            <Lightbulb size={14} />
+            <span>{promptAssistantRunning.inspire ? '生成中' : '灵感提示词'}</span>
+          </button>
+          <button
+            type="button"
+            className="prompt-assist-button"
+            disabled={promptAssistantRunning.enrich || !conversation.draftPrompt.trim()}
+            onClick={() => void enrichPrompt()}
+          >
+            <Sparkles size={14} />
+            <span>{promptAssistantRunning.enrich ? '丰富中' : '丰富提示词'}</span>
+          </button>
+          <button className="clear-prompt-button" type="button" onClick={() => void clearComposer()}>
+            <X size={15} />
+            <span>清空</span>
+          </button>
+        </div>
       </div>
       <input
         ref={fileInputRef}
@@ -184,9 +215,9 @@ export function Composer({ conversation, generating }: { conversation: Conversat
             {referenceCount > 0 ? <span>{referenceCount}</span> : null}
           </button>
           <div className="mini-controls">
-            <button className="primary generate-button" disabled={generating || !conversation.draftPrompt.trim()}>
-              {generating ? <Loader2 className="spin" size={16} /> : <Wand2 size={16} />}
-              {generating ? '生成中...' : '生成图片'}
+            <button className="primary generate-button" disabled={!conversation.draftPrompt.trim()}>
+              <Wand2 size={16} />
+              {generating ? '继续生成' : '生成图片'}
             </button>
           </div>
         </div>

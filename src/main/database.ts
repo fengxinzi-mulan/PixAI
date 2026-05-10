@@ -2,8 +2,9 @@ import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSyn
 import { basename, extname, join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
-import { DEFAULT_MODEL, ratioToSize } from '@shared/image-options'
+import { DEFAULT_IMAGE_OUTPUT_FORMAT, DEFAULT_MODEL, getDefaultImageSize } from '@shared/image-options'
 import type {
+  ConversationCreateInput,
   Conversation,
   ConversationUpdate,
   GenerationRun,
@@ -56,18 +57,27 @@ export class AppDatabase {
     return row ? this.conversationFromRow(row) : null
   }
 
-  createConversation(): Conversation {
+  createConversation(input: ConversationCreateInput = {}): Conversation {
     const now = new Date().toISOString()
+    const ratio = input.ratio || '1:1'
     const conversation: Conversation = {
       id: randomUUID(),
       title: '新会话',
       draftPrompt: '',
-      model: DEFAULT_MODEL,
-      ratio: '1:1',
-      quality: 'high',
-      n: 1,
-      autoSaveHistory: true,
-      keepFailureDetails: true,
+      model: input.model || DEFAULT_MODEL,
+      ratio,
+      size: input.size || getDefaultImageSize(ratio),
+      quality: input.quality || 'high',
+      n: input.n !== undefined ? Math.min(10, Math.max(1, input.n)) : 1,
+      outputFormat: input.outputFormat || DEFAULT_IMAGE_OUTPUT_FORMAT,
+      outputCompression: input.outputCompression ?? null,
+      background: input.background || 'auto',
+      moderation: input.moderation || 'auto',
+      stream: input.stream || false,
+      partialImages: input.partialImages ?? 0,
+      inputFidelity: input.inputFidelity ?? null,
+      autoSaveHistory: input.autoSaveHistory ?? true,
+      keepFailureDetails: input.keepFailureDetails ?? true,
       referenceImages: [],
       createdAt: now,
       updatedAt: now
@@ -75,10 +85,16 @@ export class AppDatabase {
     this.db
       .prepare(
         `insert into conversations
-        (id, title, draft_prompt, model, ratio, quality, n, auto_save_history, keep_failure_details, created_at, updated_at)
-        values (@id, @title, @draftPrompt, @model, @ratio, @quality, @n, @autoSaveHistory, @keepFailureDetails, @createdAt, @updatedAt)`
+        (id, title, draft_prompt, model, ratio, size, quality, n, output_format, output_compression, background, moderation, stream, partial_images, input_fidelity, auto_save_history, keep_failure_details, created_at, updated_at)
+        values (@id, @title, @draftPrompt, @model, @ratio, @size, @quality, @n, @outputFormat, @outputCompression, @background, @moderation, @stream, @partialImages, @inputFidelity, @autoSaveHistory, @keepFailureDetails, @createdAt, @updatedAt)`
       )
-      .run({ ...conversation, autoSaveHistory: 1, keepFailureDetails: 1 })
+      .run({
+        ...conversation,
+        outputCompression: conversation.outputCompression,
+        stream: conversation.stream ? 1 : 0,
+        autoSaveHistory: conversation.autoSaveHistory ? 1 : 0,
+        keepFailureDetails: conversation.keepFailureDetails ? 1 : 0
+      })
     return conversation
   }
 
@@ -88,7 +104,15 @@ export class AppDatabase {
     const next: Conversation = {
       ...current,
       ...input,
+      size: input.size ?? (input.ratio !== undefined ? getDefaultImageSize(input.ratio) : current.size),
       n: input.n !== undefined ? Math.min(10, Math.max(1, input.n)) : current.n,
+      outputFormat: input.outputFormat ?? current.outputFormat,
+      outputCompression: input.outputCompression !== undefined ? input.outputCompression : current.outputCompression,
+      background: input.background ?? current.background,
+      moderation: input.moderation ?? current.moderation,
+      stream: input.stream !== undefined ? input.stream : current.stream,
+      partialImages: input.partialImages !== undefined ? input.partialImages : current.partialImages,
+      inputFidelity: input.inputFidelity !== undefined ? input.inputFidelity : current.inputFidelity,
       updatedAt: new Date().toISOString()
     }
     this.db
@@ -98,14 +122,27 @@ export class AppDatabase {
         draft_prompt = @draftPrompt,
         model = @model,
         ratio = @ratio,
+        size = @size,
         quality = @quality,
         n = @n,
+        output_format = @outputFormat,
+        output_compression = @outputCompression,
+        background = @background,
+        moderation = @moderation,
+        stream = @stream,
+        partial_images = @partialImages,
+        input_fidelity = @inputFidelity,
         auto_save_history = @autoSaveHistory,
         keep_failure_details = @keepFailureDetails,
         updated_at = @updatedAt
         where id = @id`
       )
-      .run({ ...next, autoSaveHistory: next.autoSaveHistory ? 1 : 0, keepFailureDetails: next.keepFailureDetails ? 1 : 0 })
+      .run({
+        ...next,
+        stream: next.stream ? 1 : 0,
+        autoSaveHistory: next.autoSaveHistory ? 1 : 0,
+        keepFailureDetails: next.keepFailureDetails ? 1 : 0
+      })
     return next
   }
 
@@ -168,7 +205,7 @@ export class AppDatabase {
     const where: string[] = ['global_visible = 1']
     const params: Record<string, unknown> = {}
     if (options.query?.trim()) {
-      where.push('(prompt like @query or model like @query)')
+      where.push('(prompt like @query or model like @query or size like @query)')
       params.query = `%${options.query.trim()}%`
     }
     if (options.favoritesOnly) where.push('favorite = 1')
@@ -327,8 +364,16 @@ export class AppDatabase {
         draft_prompt text not null,
         model text not null,
         ratio text not null,
+        size text,
         quality text not null,
         n integer not null,
+        output_format text not null default 'png',
+        output_compression integer,
+        background text not null default 'auto',
+        moderation text not null default 'auto',
+        stream integer not null default 0,
+        partial_images integer not null default 0,
+        input_fidelity text,
         auto_save_history integer not null,
         keep_failure_details integer not null,
         created_at text not null,
@@ -403,6 +448,31 @@ export class AppDatabase {
         primary key (run_id, reference_image_id)
       );
     `)
+    const conversationColumns = this.db.prepare('pragma table_info(conversations)').all() as Array<{ name: string }>
+    if (!conversationColumns.some((column) => column.name === 'size')) {
+      this.db.exec('alter table conversations add column size text')
+    }
+    if (!conversationColumns.some((column) => column.name === 'output_format')) {
+      this.db.exec("alter table conversations add column output_format text not null default 'png'")
+    }
+    if (!conversationColumns.some((column) => column.name === 'output_compression')) {
+      this.db.exec('alter table conversations add column output_compression integer')
+    }
+    if (!conversationColumns.some((column) => column.name === 'background')) {
+      this.db.exec("alter table conversations add column background text not null default 'auto'")
+    }
+    if (!conversationColumns.some((column) => column.name === 'moderation')) {
+      this.db.exec("alter table conversations add column moderation text not null default 'auto'")
+    }
+    if (!conversationColumns.some((column) => column.name === 'stream')) {
+      this.db.exec('alter table conversations add column stream integer not null default 0')
+    }
+    if (!conversationColumns.some((column) => column.name === 'partial_images')) {
+      this.db.exec('alter table conversations add column partial_images integer not null default 0')
+    }
+    if (!conversationColumns.some((column) => column.name === 'input_fidelity')) {
+      this.db.exec('alter table conversations add column input_fidelity text')
+    }
     const columns = this.db.prepare('pragma table_info(image_history)').all() as Array<{ name: string }>
     if (!columns.some((column) => column.name === 'global_visible')) {
       this.db.exec('alter table image_history add column global_visible integer not null default 1')
@@ -435,8 +505,16 @@ export class AppDatabase {
       draftPrompt: String(row.draft_prompt),
       model: String(row.model),
       ratio: row.ratio as ImageRatio,
+      size: row.size ? String(row.size) : getDefaultImageSize(row.ratio as ImageRatio),
       quality: row.quality as Conversation['quality'],
       n: Number(row.n),
+      outputFormat: row.output_format ? String(row.output_format) as Conversation['outputFormat'] : DEFAULT_IMAGE_OUTPUT_FORMAT,
+      outputCompression: row.output_compression != null ? Number(row.output_compression) : null,
+      background: row.background === 'opaque' ? 'opaque' : 'auto',
+      moderation: row.moderation === 'low' ? 'low' : 'auto',
+      stream: Boolean(row.stream),
+      partialImages: row.partial_images != null ? Number(row.partial_images) : 0,
+      inputFidelity: row.input_fidelity === 'high' || row.input_fidelity === 'low' ? row.input_fidelity : null,
       autoSaveHistory: Boolean(row.auto_save_history),
       keepFailureDetails: Boolean(row.keep_failure_details),
       referenceImages: this.listConversationReferences(String(row.id)),
@@ -451,7 +529,7 @@ export class AppDatabase {
     prompt: String(row.prompt),
     model: String(row.model),
     ratio: row.ratio as ImageRatio,
-    size: row.size ? String(row.size) : ratioToSize(row.ratio as ImageRatio),
+    size: row.size ? String(row.size) : getDefaultImageSize(row.ratio as ImageRatio),
     quality: row.quality as GenerationRun['quality'],
     durationMs: row.duration_ms != null ? Number(row.duration_ms) : null,
     n: Number(row.n),

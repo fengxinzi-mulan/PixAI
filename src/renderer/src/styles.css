@@ -1746,6 +1746,10 @@ textarea {
   padding: 0 8px;
 }
 
+.workspace-pagination {
+  margin-top: 10px;
+}
+
 .history-card {
   display: grid;
   grid-template-columns: 74px 1fr;

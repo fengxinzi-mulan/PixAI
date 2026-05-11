@@ -9,7 +9,7 @@ import type {
 } from './types'
 
 export const DEFAULT_MODEL = 'gpt-image-2'
-export const DEFAULT_IMAGE_OUTPUT_FORMAT: ImageOutputFormat = 'jpeg'
+export const DEFAULT_IMAGE_OUTPUT_FORMAT: ImageOutputFormat = 'png'
 export const IMAGE_RATIOS: ImageRatio[] = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21']
 export const IMAGE_QUALITIES: GenerateImageInput['quality'][] = ['auto', 'low', 'medium', 'high']
 export const IMAGE_OUTPUT_FORMATS: ImageOutputFormat[] = ['jpeg', 'png', 'webp']

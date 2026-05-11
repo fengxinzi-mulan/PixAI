@@ -49,7 +49,7 @@ describe('image options', () => {
     })
     expect(formatImageQuality('high')).toBe('高')
     expect(IMAGE_OUTPUT_FORMATS).toEqual(['jpeg', 'png', 'webp'])
-    expect(DEFAULT_IMAGE_OUTPUT_FORMAT).toBe('jpeg')
+    expect(DEFAULT_IMAGE_OUTPUT_FORMAT).toBe('png')
     expect(IMAGE_OUTPUT_FORMAT_LABELS).toEqual({ jpeg: 'JPEG', png: 'PNG', webp: 'WebP' })
     expect(IMAGE_BACKGROUNDS).toEqual(['auto', 'opaque'])
     expect(IMAGE_BACKGROUND_LABELS).toEqual({ auto: '自动', opaque: '不透明' })

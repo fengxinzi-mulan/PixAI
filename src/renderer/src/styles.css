@@ -1022,28 +1022,18 @@ textarea {
 }
 
 .art-card.loading {
-  background: linear-gradient(100deg, #e9f5ef 0%, #f7fbf8 34%, #dff4ec 66%, #e9f5ef 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.1s infinite linear;
+  background: linear-gradient(135deg, #edf8f3 0%, #f8fbf9 52%, #e5f1ff 100%);
   display: grid;
   place-items: center;
 }
 
 .dark .art-card.loading {
-  background: linear-gradient(100deg, #17211d 0%, #22302b 34%, #1d3b32 66%, #17211d 100%);
-  background-size: 200% 100%;
+  background: linear-gradient(135deg, #17211d 0%, #1d3029 52%, #1e2d49 100%);
 }
 
 .generating-card {
   gap: 10px;
-}
-
-.art-spinner {
-  color: #2b8b6b;
-}
-
-.dark .art-spinner {
-  color: #8ce0bd;
+  contain: layout paint;
 }
 
 .generating-label {
@@ -1058,7 +1048,9 @@ textarea {
 
 .generating-meta {
   position: absolute;
-  inset: auto 8px 8px 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1090,10 +1082,6 @@ textarea {
 
 .dark .cancel-chip:hover {
   background: rgba(17, 26, 23, 0.68);
-}
-
-@keyframes shimmer {
-  to { background-position: -200% 0; }
 }
 
 .art-card.failed {
@@ -1363,23 +1351,43 @@ textarea {
 .advanced-settings {
   margin-top: 2px;
   margin-bottom: 10px;
-  border-top: 1px solid #edf3ef;
-}
-
-.dark .advanced-settings {
-  border-top-color: #22302b;
+  padding-top: 4px;
 }
 
 .advanced-settings > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
-  color: var(--ink);
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(30, 159, 120, 0.42);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(223, 246, 238, 0.96), rgba(233, 240, 255, 0.92));
+  color: #17694f;
+  box-shadow: 0 8px 18px rgba(39, 155, 118, 0.12);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   cursor: pointer;
   list-style: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.advanced-settings > summary:hover {
+  border-color: rgba(30, 159, 120, 0.7);
+  box-shadow: 0 10px 22px rgba(39, 155, 118, 0.18);
+  transform: translateY(-1px);
+}
+
+.dark .advanced-settings > summary {
+  border-color: rgba(96, 199, 161, 0.38);
+  background: linear-gradient(135deg, rgba(29, 59, 50, 0.96), rgba(30, 45, 73, 0.72));
+  color: #8ce0bd;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.dark .advanced-settings > summary:hover {
+  border-color: rgba(140, 224, 189, 0.62);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
 }
 
 .advanced-settings > summary::-webkit-details-marker {
@@ -1389,7 +1397,7 @@ textarea {
 .advanced-settings-body {
   display: grid;
   gap: 8px;
-  padding-top: 6px;
+  padding-top: 10px;
 }
 
 .gallery-page {

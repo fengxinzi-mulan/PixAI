@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { Image as ImageIcon, Trash2 } from 'lucide-react'
-import { elapsedMs } from '@shared/duration'
+import { elapsedMs, formatDuration } from '@shared/duration'
 import type { GenerationRun, ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 import { GallerySelect, type GallerySelectOption } from '@renderer/components/gallery/GallerySelect'
@@ -56,6 +56,9 @@ export function CanvasArea({
   const generatingCount = visibleGeneratingCount + extraPendingCount
   const generationElapsedMs = generationStartedAt != null ? elapsedMs(generationStartedAt, generationClockMs) : null
   const summarySegments = getWorkspaceResultSummarySegments(items.map(({ item }) => item), generatingCount)
+  const generationStatusText = generationElapsedMs != null && generating
+    ? `正在生成 ${generatingCount} 项 · 已耗时 ${formatDuration(generationElapsedMs)}`
+    : null
   const workspaceEntries: WorkspaceEntry[] = useMemo(() => [
     ...Array.from({ length: extraPendingCount }, (_value, index) => ({
       key: `pending-local-${index}`,
@@ -85,7 +88,7 @@ export function CanvasArea({
     void refreshConversationResults(current.id)
     const timer = window.setInterval(() => {
       void refreshConversationResults(current.id)
-    }, 900)
+    }, 2000)
     return () => window.clearInterval(timer)
   }, [current, generating, refreshConversationResults])
 
@@ -118,7 +121,7 @@ export function CanvasArea({
           ) : null}
           <div className="workspace-summary" aria-label="工作区结果统计">
             {generationElapsedMs != null && generating ? (
-              <span className="summary-chip active">进行中 {pendingGenerationCount || runningRuns.length} 组</span>
+              <span className="summary-chip active">{generationStatusText}</span>
             ) : null}
             {summarySegments.map((segment) => (
               <span key={segment.key} className={`summary-chip ${segment.tone}`}>

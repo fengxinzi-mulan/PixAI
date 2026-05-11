@@ -1,5 +1,4 @@
-import { useState, type JSX } from 'react'
-import { Loader2 } from 'lucide-react'
+import type { JSX } from 'react'
 import { formatDuration } from '@shared/duration'
 import { useAppStore } from '@renderer/store/app-store'
 
@@ -13,21 +12,15 @@ export function GeneratingTile({
   generationElapsedMs: number | null
 }): JSX.Element {
   const { cancelGeneration } = useAppStore()
-  const [hovered, setHovered] = useState(false)
+  const canCancel = runId && typeof requestIndex === 'number'
   const elapsedText = formatDuration(generationElapsedMs ?? 0)
 
   return (
-    <article
-      className="art-card loading generating-card"
-      aria-label="生成中"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <Loader2 className="art-spinner spin" size={24} />
+    <article className="art-card loading generating-card" aria-label="生成中">
       <span className="generating-label">生成中</span>
       <div className="generating-meta">
         <span>{`已耗时 ${elapsedText}`}</span>
-        {hovered && runId && typeof requestIndex === 'number' ? (
+        {canCancel ? (
           <button
             type="button"
             className="cancel-chip"

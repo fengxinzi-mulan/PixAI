@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState, type JSX, type PointerEvent, type SyntheticEvent, type WheelEvent } from 'react'
 import { ChevronLeft, ChevronRight, Copy, Download, Heart, Maximize2, Minimize2, RotateCcw, SquarePen, X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ImageHistoryItem } from '@shared/types'
@@ -85,7 +86,10 @@ export function PreviewModal({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (document.fullscreenElement) return
+        if (fullscreen) {
+          setFullscreen(false)
+          return
+        }
         onClose()
       }
       if (event.key === 'ArrowLeft' && canGoPrevious) setCurrentId(items[currentIndex - 1].id)
@@ -93,21 +97,13 @@ export function PreviewModal({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canGoNext, canGoPrevious, currentIndex, items, onClose])
+  }, [canGoNext, canGoPrevious, currentIndex, fullscreen, items, onClose])
 
   useEffect(() => {
     if (!imageSize) return
     setZoom(getPreviewFitZoom(imageSize, artSize))
     setPan({ x: 0, y: 0 })
   }, [artSize, imageSize])
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setFullscreen(document.fullscreenElement === panelRef.current)
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [])
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -166,20 +162,12 @@ export function PreviewModal({
   }
 
   const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen()
-      } else {
-        await panelRef.current?.requestFullscreen()
-      }
-    } catch (error) {
-      notify(error instanceof Error ? `全屏切换失败：${error.message}` : '全屏切换失败')
-    }
+    setFullscreen((value) => !value)
   }
 
-  return (
+  const content = (
     <div
-      className="modal open"
+      className={`modal open ${fullscreen ? 'fullscreen-preview' : ''}`}
       onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
@@ -307,4 +295,6 @@ export function PreviewModal({
       ) : null}
     </div>
   )
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }

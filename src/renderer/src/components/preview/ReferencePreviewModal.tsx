@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import type { ReferenceImage } from '@shared/types'
@@ -28,7 +29,7 @@ export function ReferencePreviewModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [canGoNext, canGoPrevious, currentIndex, onClose, references])
 
-  return (
+  const content = (
     <div
       className="modal open"
       onClick={(event) => event.stopPropagation()}
@@ -66,4 +67,6 @@ export function ReferencePreviewModal({
       </div>
     </div>
   )
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }

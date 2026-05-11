@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
-import { ArrowLeft, CheckSquare, Heart, RotateCcw, Search, Square, Star, Trash2 } from 'lucide-react'
+import { CheckSquare, Download, Heart, RotateCcw, Search, Square, Star, Trash2 } from 'lucide-react'
 import type { ImageHistoryItem, ImageQuality, ImageRatio, ImageStatus } from '@shared/types'
 import { IMAGE_QUALITIES, IMAGE_RATIOS, formatImageQuality } from '@shared/image-options'
 import { useAppStore } from '@renderer/store/app-store'
@@ -83,9 +83,9 @@ export function GalleryPage(): JSX.Element {
     setQuery,
     reloadHistory,
     setFavoritesOnly,
-    setView,
     deleteHistoryItems,
-    setFavoriteForHistoryItems
+    setFavoriteForHistoryItems,
+    notify
   } = useAppStore()
   const [statusFilter, setStatusFilter] = useState<GalleryStatusFilter>('all')
   const [modelFilter, setModelFilter] = useState('all')
@@ -180,6 +180,7 @@ export function GalleryPage(): JSX.Element {
     return sortedHistory.slice(start, start + pageSize)
   }, [page, pageSize, sortedHistory])
   const selectedItems = useMemo(() => history.filter((item) => selectedIds.has(item.id)), [history, selectedIds])
+  const selectedDownloadableItems = useMemo(() => selectedItems.filter((item) => item.status === 'succeeded'), [selectedItems])
   const previewItems = visibleHistory.filter((item) => item.status === 'succeeded')
   const allFilteredSelected = sortedHistory.length > 0 && sortedHistory.every((item) => selectedIds.has(item.id))
   const filteredSelectedCount = sortedHistory.filter((item) => selectedIds.has(item.id)).length
@@ -229,6 +230,16 @@ export function GalleryPage(): JSX.Element {
     }
   }
 
+  const downloadSelected = async () => {
+    const result = await window.pixai.image.downloadMany(Array.from(selectedIds))
+    if (!result) return
+    if (result.skipped > 0) {
+      notify(`已下载 ${result.saved} 张图片，跳过 ${result.skipped} 项`)
+      return
+    }
+    notify(`已下载 ${result.saved} 张图片`)
+  }
+
   return (
     <section className="gallery-page">
       <div className="gallery-tools">
@@ -272,6 +283,10 @@ export function GalleryPage(): JSX.Element {
             收藏所选
           </button>
           <button disabled={selectedIds.size === 0} onClick={() => void setFavoriteForHistoryItems(selectedItems, false)}>取消收藏</button>
+          <button disabled={selectedDownloadableItems.length === 0} onClick={() => void downloadSelected()}>
+            <Download size={15} />
+            下载所选
+          </button>
           <button
             className="danger"
             disabled={selectedIds.size === 0}

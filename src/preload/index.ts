@@ -27,7 +27,8 @@ const api: PixAIAPI = {
     cancel: (runId: string, requestIndex?: number) => ipcRenderer.invoke('image:cancel', runId, requestIndex),
     url: (id: string) => `pixai-image://image/${encodeURIComponent(id)}`,
     copy: (id: string) => ipcRenderer.invoke('image:copy', id),
-    download: (id: string) => ipcRenderer.invoke('image:download', id)
+    download: (id: string) => ipcRenderer.invoke('image:download', id),
+    downloadMany: (ids: string[]) => ipcRenderer.invoke('image:download-many', ids)
   },
   prompt: {
     inspire: (input?: PromptAssistInput) => ipcRenderer.invoke('prompt:inspire', input),

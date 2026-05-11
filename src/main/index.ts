@@ -11,6 +11,7 @@ import type {
   ReferenceImageImportFile
 } from '@shared/types'
 import { AppDatabase } from './database'
+import { copySelectedHistoryImages } from './batch-download'
 import { resolveDataDir } from './data-path'
 import { ImageService } from './image-service'
 import { PromptService } from './prompt-service'
@@ -100,6 +101,24 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     copyFileSync(item.filePath, result.filePath)
     return result.filePath
+  })
+  ipcMain.handle('image:download-many', async (_event, ids: string[]) => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, {
+          title: '选择保存目录',
+          properties: ['openDirectory', 'createDirectory']
+        })
+      : await dialog.showOpenDialog({
+          title: '选择保存目录',
+          properties: ['openDirectory', 'createDirectory']
+        })
+    const directory = result.filePaths[0]
+    if (result.canceled || !directory) return null
+    return copySelectedHistoryImages({
+      ids,
+      directory,
+      getHistory: (id) => database.getHistory(id)
+    })
   })
   ipcMain.handle('prompt:inspire', (_event, input?: PromptAssistInput) => promptService.inspire(input))
   ipcMain.handle('prompt:enrich', (_event, input: PromptAssistInput & { prompt: string }) => promptService.enrich(input))

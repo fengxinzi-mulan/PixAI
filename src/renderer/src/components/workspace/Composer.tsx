@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type JSX } from 'react'
+import { useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type JSX } from 'react'
 import { GripVertical, ImagePlus, Lightbulb, Sparkles, Trash2, Wand2, X } from 'lucide-react'
 import type { Conversation } from '@shared/types'
 import { formatImageSize } from '@shared/image-options'
@@ -71,12 +71,6 @@ export function Composer({ conversation, generating }: { conversation: Conversat
     next.splice(toIndex, 0, moved)
     void reorderReferenceImages(next.map((reference) => reference.id))
   }
-
-  useLayoutEffect(() => {
-    const prompt = promptRef.current
-    if (!prompt) return
-    prompt.scrollTop = prompt.scrollHeight
-  }, [conversation.draftPrompt])
 
   return (
     <form

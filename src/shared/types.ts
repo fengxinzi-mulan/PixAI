@@ -175,6 +175,12 @@ export type GenerateImageResult = {
   canceled?: boolean
 }
 
+export type BatchDownloadResult = {
+  directory: string
+  saved: number
+  skipped: number
+}
+
 export type HistoryListOptions = {
   query?: string
   sort?: 'newest' | 'oldest'
@@ -199,6 +205,7 @@ export type PixAIAPI = {
     url: (id: string) => string
     copy: (id: string) => Promise<void>
     download: (id: string) => Promise<string | null>
+    downloadMany: (ids: string[]) => Promise<BatchDownloadResult | null>
   }
   prompt: {
     inspire: (input?: PromptAssistInput) => Promise<string>

@@ -22,7 +22,7 @@ export function createMainWindowOptions(): BrowserWindowConstructorOptions {
 }
 
 function resolveWindowIconPath(): string {
-  if (app.isPackaged) {
+  if (app?.isPackaged) {
     return join(process.resourcesPath, 'icon.ico')
   }
   return join(process.cwd(), 'src/renderer/src/assets/icon.ico')

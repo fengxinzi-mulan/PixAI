@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false
+  }
+}))
+
 import { createMainWindowOptions } from './window-options'
 
 describe('main window options', () => {

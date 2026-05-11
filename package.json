@@ -1,6 +1,6 @@
 {
   "name": "pixai",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "PixAI Windows desktop image generation app.",
   "main": "./out/main/index.js",
   "author": "PixAI",

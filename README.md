@@ -97,8 +97,8 @@ dist/
 安装包文件名会包含架构后缀，例如：
 
 ```text
-PixAI Setup 1.0.2-x64.exe
-PixAI Setup 1.0.2-ia32.exe
+PixAI Setup 1.0.3-x64.exe
+PixAI Setup 1.0.3-ia32.exe
 ```
 
 ## 发布 Releases
@@ -109,8 +109,8 @@ GitHub Releases 由 `.github/workflows/release.yml` 自动完成。
 2. 创建并推送 tag：
 
 ```powershell
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 也可以在 GitHub Actions 页面手动运行 workflow，并填写 `tag`。

@@ -36,7 +36,12 @@ let imageService: ImageService
 let promptService: PromptService
 
 function getDataDir(): string {
-  return resolveDataDir({ cwd: process.cwd(), packaged: app.isPackaged, exePath: app.getPath('exe') })
+  return resolveDataDir({
+    cwd: process.cwd(),
+    packaged: app.isPackaged,
+    exePath: app.getPath('exe'),
+    userDataPath: app.getPath('userData')
+  })
 }
 
 function createWindow(): void {

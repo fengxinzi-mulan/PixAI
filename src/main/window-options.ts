@@ -22,8 +22,9 @@ export function createMainWindowOptions(): BrowserWindowConstructorOptions {
 }
 
 function resolveWindowIconPath(): string {
+  const iconFileName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
   if (app?.isPackaged) {
-    return join(process.resourcesPath, 'icon.ico')
+    return join(process.resourcesPath, iconFileName)
   }
-  return join(process.cwd(), 'src/renderer/src/assets/icon.ico')
+  return join(process.cwd(), `src/renderer/src/assets/${iconFileName}`)
 }

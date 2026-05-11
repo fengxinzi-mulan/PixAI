@@ -16,7 +16,11 @@ permissions:
 
 jobs:
   validate:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,11 +47,45 @@ jobs:
 
   package:
     needs: validate
-    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, ia32]
+        include:
+          - platform: windows
+            os: windows-latest
+            arch: x64
+            artifact: pixai-windows-x64
+            package_command: pnpm exec electron-builder --win nsis --x64 --publish never
+            artifact_path: |
+              dist/*-x64.exe
+              dist/*-x64.exe.blockmap
+          - platform: windows
+            os: windows-latest
+            arch: ia32
+            artifact: pixai-windows-ia32
+            package_command: pnpm exec electron-builder --win nsis --ia32 --publish never
+            artifact_path: |
+              dist/*-ia32.exe
+              dist/*-ia32.exe.blockmap
+          - platform: mac
+            os: macos-15-intel
+            arch: x64
+            artifact: pixai-mac-x64
+            package_command: pnpm exec electron-builder --mac dmg zip --x64 --publish never
+            artifact_path: |
+              dist/*mac-x64.dmg
+              dist/*mac-x64.zip
+          - platform: mac
+            os: macos-15
+            arch: arm64
+            artifact: pixai-mac-arm64
+            package_command: pnpm exec electron-builder --mac dmg zip --arm64 --publish never
+            artifact_path: |
+              dist/*mac-arm64.dmg
+              dist/*mac-arm64.zip
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,16 +107,14 @@ jobs:
       - name: Build app
         run: pnpm build
 
-      - name: Package Windows installer
-        run: pnpm exec electron-builder --win nsis --${{ matrix.arch }} --publish never
+      - name: Package ${{ matrix.platform }} ${{ matrix.arch }}
+        run: ${{ matrix.package_command }}
 
-      - name: Upload installer artifact
+      - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pixai-${{ matrix.arch }}
-          path: |
-            dist/*-${{ matrix.arch }}.exe
-            dist/*-${{ matrix.arch }}.exe.blockmap
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: error
 
   release:

@@ -1,7 +1,7 @@
 {
   "name": "pixai",
-  "version": "1.0.3",
-  "description": "PixAI Windows desktop image generation app.",
+  "version": "1.1.0",
+  "description": "PixAI desktop image generation app.",
   "main": "./out/main/index.js",
   "author": "PixAI",
   "homepage": "./",
@@ -50,6 +50,10 @@
       {
         "from": "src/renderer/src/assets/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "src/renderer/src/assets/icon.png",
+        "to": "icon.png"
       }
     ],
     "asarUnpack": [
@@ -64,6 +68,27 @@
           "arch": [
             "x64",
             "ia32"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "icon": "src/renderer/src/assets/icon.png",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "category": "public.app-category.graphics-design",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
           ]
         }
       ]

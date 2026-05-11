@@ -3,6 +3,7 @@ import { Loader2, Trash2 } from 'lucide-react'
 import { useAppStore } from '@renderer/store/app-store'
 import { getSessionRowView } from '@renderer/session-list'
 import { getThemeToggleView } from '@renderer/theme-toggle'
+import { appVersion } from '@shared/app-version'
 
 export function Sidebar(): JSX.Element {
   const {
@@ -57,7 +58,7 @@ export function Sidebar(): JSX.Element {
       <div className="app-footer">
         <div className="version-line">
           <span>PixAI</span>
-          <span>v1.0.0</span>
+          <span>v{appVersion}</span>
         </div>
         <button className="theme-toggle" onClick={toggleTheme}>
           <span>{themeToggle.label}</span>

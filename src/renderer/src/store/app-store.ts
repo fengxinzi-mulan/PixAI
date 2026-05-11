@@ -19,8 +19,9 @@ import {
   markGenerationRequestRemoved,
   pruneRemovedGenerationIndexesByRunId
 } from './generation-state'
+import type { PromptTemplate } from '../prompt-library'
 
-type View = 'workspace' | 'gallery'
+type View = 'workspace' | 'gallery' | 'prompts'
 
 function normalizeConversationInteger(value: number | null | undefined, min: number, max: number): number | undefined {
   if (value === null || value === undefined) return undefined
@@ -74,6 +75,7 @@ type AppState = {
   addHistoryAsReference: (historyId: string) => Promise<void>
   removeReferenceImage: (referenceImageId: string) => Promise<void>
   reorderReferenceImages: (referenceImageIds: string[]) => Promise<void>
+  applyPromptTemplate: (template: PromptTemplate) => Promise<void>
   inspirePrompt: () => Promise<void>
   enrichPrompt: () => Promise<void>
   generate: () => Promise<void>
@@ -324,6 +326,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       conversations: get().conversations.map((item) => (item.id === id ? { ...item, referenceImages } : item))
     })
+  },
+  applyPromptTemplate: async (template) => {
+    const state = get()
+    let conversation = state.conversations.find((item) => item.id === state.activeConversationId) || null
+    if (!conversation) {
+      await get().createConversation(
+        {
+          ratio: template.ratio,
+          size: getDefaultImageSize(template.ratio),
+          quality: template.quality
+        },
+        { silent: true }
+      )
+      conversation = get().conversations.find((item) => item.id === get().activeConversationId) || null
+    }
+    if (!conversation) return
+
+    const patch: ConversationUpdate = {
+      draftPrompt: template.prompt,
+      ratio: template.ratio,
+      size: getDefaultImageSize(template.ratio),
+      quality: template.quality
+    }
+    if (conversation.title === '新会话') {
+      patch.title = template.title
+    }
+
+    await get().updateActiveConversation(patch)
+    set({ view: 'workspace' })
+    get().notify(`已套用「${template.title}」`)
   },
   inspirePrompt: async () => {
     const conversation = get().conversations.find((item) => item.id === get().activeConversationId)

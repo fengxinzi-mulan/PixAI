@@ -144,6 +144,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   const dataDir = getDataDir()
   database = new AppDatabase(dataDir)
+  database.recoverInterruptedRuns()
   settings = new SettingsStore(join(dataDir, 'settings.json'))
   imageService = new ImageService(database, settings)
   promptService = new PromptService(settings)

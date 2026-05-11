@@ -15,6 +15,7 @@ import type {
   ImageStatus,
   ReferenceImage
 } from '@shared/types'
+import { createInterruptedRunRecoveryPlan } from './interrupted-run-recovery'
 
 type Row = Record<string, unknown>
 
@@ -171,6 +172,21 @@ export class AppDatabase {
       .prepare('update generation_runs set status = ?, error_message = ?, error_details = ?, duration_ms = ? where id = ?')
       .run(next.status, next.errorMessage, next.errorDetails, next.durationMs, id)
     return this.getRun(id) || next
+  }
+
+  recoverInterruptedRuns(now = new Date()): number {
+    const runningRuns = this.db.prepare('select id from generation_runs where status = ?').all('running') as Array<{ id: string }>
+    if (runningRuns.length === 0) {
+      return 0
+    }
+
+    const transaction = this.db.transaction(() => {
+      for (const { id } of runningRuns) {
+        this.recoverInterruptedRun(id, now)
+      }
+    })
+    transaction()
+    return runningRuns.length
   }
 
   getRun(id: string): GenerationRun | null {
@@ -551,6 +567,53 @@ export class AppDatabase {
       .all(String(row.id))
       .map((historyRow) => this.historyFromRow(historyRow as Row))
   })
+
+  private recoverInterruptedRun(runId: string, now: Date): void {
+    const run = this.getRun(runId)
+    if (!run || run.status !== 'running') {
+      return
+    }
+
+    const recoveryPlan = createInterruptedRunRecoveryPlan(run, now)
+    if (recoveryPlan.failedItems.length > 0) {
+      for (const failedItem of recoveryPlan.failedItems) {
+        this.db
+          .prepare(
+            `insert into image_history
+            (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, favorite, global_visible, generation_mode, created_at)
+            values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @favorite, @globalVisible, @generationMode, @createdAt)`
+          )
+          .run({
+            id: randomUUID(),
+            conversationId: run.conversationId,
+            runId: run.id,
+            prompt: run.prompt,
+            model: run.model,
+            ratio: run.ratio,
+            size: run.size,
+            quality: run.quality,
+            requestIndex: failedItem.requestIndex,
+            durationMs: failedItem.durationMs,
+            filePath: null,
+            fileSizeBytes: null,
+            status: 'failed',
+            errorMessage: failedItem.errorMessage,
+            errorDetails: failedItem.errorDetails,
+            favorite: 0,
+            globalVisible: this.getConversation(run.conversationId)?.autoSaveHistory !== false ? 1 : 0,
+            generationMode: run.generationMode,
+            createdAt: failedItem.createdAt
+          })
+      }
+    }
+
+    this.updateRun(run.id, {
+      status: recoveryPlan.status,
+      errorMessage: recoveryPlan.errorMessage,
+      errorDetails: recoveryPlan.errorDetails,
+      durationMs: recoveryPlan.durationMs
+    })
+  }
 
   private historyFromRow = (row: Row): ImageHistoryItem => ({
     id: String(row.id),

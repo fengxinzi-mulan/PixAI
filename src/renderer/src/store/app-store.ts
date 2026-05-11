@@ -334,7 +334,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().createConversation(
         {
           ratio: template.ratio,
-          size: getDefaultImageSize(template.ratio),
+          size: template.resolution || getDefaultImageSize(template.ratio),
           quality: template.quality
         },
         { silent: true }
@@ -346,7 +346,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const patch: ConversationUpdate = {
       draftPrompt: template.prompt,
       ratio: template.ratio,
-      size: getDefaultImageSize(template.ratio),
+      size: template.resolution || getDefaultImageSize(template.ratio),
       quality: template.quality
     }
     if (conversation.title === '新会话') {

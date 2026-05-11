@@ -53,6 +53,43 @@ describe('app store prompt template actions', () => {
     expect(useAppStore.getState().conversations[0].draftPrompt).toBe('new prompt')
   })
 
+  it('applies the template resolution instead of the ratio default', async () => {
+    const conversation = createConversation({ title: '已有会话', draftPrompt: '旧提示词' })
+    const update = vi.fn((_id: string, input: Partial<Conversation>) => Promise.resolve({ ...conversation, ...input }))
+    installPixaiMock({
+      conversation: {
+        create: vi.fn(),
+        update
+      }
+    })
+    useAppStore.setState({
+      conversations: [conversation],
+      activeConversationId: conversation.id,
+      view: 'prompts',
+      promptAssistantRunning: { inspire: false, enrich: false },
+      toast: null
+    })
+
+    await useAppStore.getState().applyPromptTemplate({
+      id: 'template-resolution',
+      title: '高分模板',
+      category: '商业海报',
+      description: '',
+      prompt: 'high resolution prompt',
+      tags: [],
+      ratio: '16:9',
+      resolution: '3840x2160',
+      quality: 'high',
+    })
+
+    expect(update).toHaveBeenCalledWith(conversation.id, {
+      draftPrompt: 'high resolution prompt',
+      ratio: '16:9',
+      size: '3840x2160',
+      quality: 'high'
+    })
+  })
+
   it('creates a new conversation when no conversation is active', async () => {
     const createdConversation = createConversation()
     const create = vi.fn(() => Promise.resolve(createdConversation))

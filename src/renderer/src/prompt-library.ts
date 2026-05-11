@@ -269,7 +269,7 @@ function normalizePromptTemplate(input: unknown, id = createPromptTemplateId()):
   const category = safeText(record.category)
   const description = safeText(record.description)
   const prompt = safeText(record.prompt) || safeText(record.promptZh)
-  if (!title || !category || !description || !prompt) return null
+  if (!title || !category || !prompt) return null
   const ratio = isImageRatio(record.ratio) ? record.ratio : '1:1'
   const quality = isImageQuality(record.quality) ? record.quality : 'auto'
   return {

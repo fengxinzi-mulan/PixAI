@@ -152,7 +152,7 @@ export function PromptLibraryPage(): JSX.Element {
             <div className="prompt-template-card-head">
               <div>
                 <h3>{template.title}</h3>
-                <p>{template.description}</p>
+                <p>{template.description || '暂无说明'}</p>
               </div>
               <div className="prompt-template-card-badges">
                 <span className="pill good">{template.category}</span>

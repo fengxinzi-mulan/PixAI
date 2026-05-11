@@ -39,9 +39,11 @@ export function PromptTemplateEditorModal({
   onClose: () => void
 }): JSX.Element {
   const [form, setForm] = useState<PromptTemplateInput>(initialValue)
+  const [errors, setErrors] = useState<Partial<Record<'title' | 'category' | 'prompt', string>>>({})
 
   useEffect(() => {
     setForm(initialValue)
+    setErrors({})
   }, [initialValue])
 
   useEffect(() => {
@@ -63,6 +65,10 @@ export function PromptTemplateEditorModal({
   const resolutionOptions = useMemo(() => getImageSizeOptions(form.ratio), [form.ratio])
 
   const submit = async () => {
+    const nextErrors = validatePromptTemplateInput(form)
+    setErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) return
+
     await onSave({
       ...form,
       tags: form.tags.filter(Boolean),
@@ -98,12 +104,13 @@ export function PromptTemplateEditorModal({
         </div>
         <div className="prompt-editor-body">
           <label className="field">
-            <span>标题</span>
+            <span>标题 *</span>
             <input
               className="input-control"
               value={form.title}
               onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
             />
+            {errors.title ? <span className="field-error">{errors.title}</span> : null}
           </label>
           <div className="prompt-editor-row">
             <label className="field">
@@ -139,7 +146,7 @@ export function PromptTemplateEditorModal({
           </div>
           <div className="prompt-editor-top-row">
             <div className="field">
-              <span>分类</span>
+              <span>分类 *</span>
               <EditableSelect
                 value={form.category}
                 options={suggestedCategories}
@@ -148,6 +155,7 @@ export function PromptTemplateEditorModal({
                 allowCreate
                 onChange={(category) => setForm((current) => ({ ...current, category }))}
               />
+              {errors.category ? <span className="field-error">{errors.category}</span> : null}
             </div>
             <div className="field">
               <span>标签</span>
@@ -170,12 +178,13 @@ export function PromptTemplateEditorModal({
             />
           </label>
           <label className="field">
-            <span>提示词</span>
+            <span>提示词 *</span>
             <textarea
               className="prompt-editor-textarea"
               value={form.prompt}
               onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))}
             />
+            {errors.prompt ? <span className="field-error">{errors.prompt}</span> : null}
           </label>
           <div className="prompt-editor-actions">
             <button type="button" className="primary" onClick={() => void submit()}>
@@ -195,4 +204,12 @@ export function PromptTemplateEditorModal({
 
 function normalizeResolution(ratio: PromptTemplate['ratio'], value: string): string {
   return getImageSizeOptions(ratio).some((option) => option.value === value) ? value : getDefaultImageSize(ratio)
+}
+
+function validatePromptTemplateInput(input: PromptTemplateInput): Partial<Record<'title' | 'category' | 'prompt', string>> {
+  const errors: Partial<Record<'title' | 'category' | 'prompt', string>> = {}
+  if (!input.title.trim()) errors.title = '请填写标题'
+  if (!input.category.trim()) errors.category = '请填写分类'
+  if (!input.prompt.trim()) errors.prompt = '请填写提示词'
+  return errors
 }

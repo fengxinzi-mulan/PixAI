@@ -80,7 +80,7 @@ describe('prompt library', () => {
       ...createEmptyPromptTemplateInput(),
       title: '自定义模板',
       category: '测试分类',
-      description: '测试说明',
+      description: '',
       prompt: '中文提示词',
       tags: ['测试'],
       ratio: '1:1',
@@ -88,6 +88,7 @@ describe('prompt library', () => {
       quality: 'high'
     })
     expect(created.prompt).toBe('中文提示词')
+    expect(created.description).toBe('')
     expect(getPromptLibraryItems().some((item) => item.id === created.id)).toBe(true)
 
     const builtin = getPromptLibraryItems().find((item) => item.id === 'sticker-sheet')

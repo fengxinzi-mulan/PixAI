@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import type { JSX } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
+import { useDropdown } from '@renderer/components/common/Dropdown'
 
 export type GallerySelectOption<T extends string | number> = {
   value: T
@@ -19,49 +20,22 @@ export function GallerySelect<T extends string | number>({
   className?: string
   onChange: (value: T) => void
 }): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const previousValueRef = useRef(value)
+  const dropdown = useDropdown()
   const selectedOption = options.find((option) => option.value === value) || options[0]
 
-  useEffect(() => {
-    if (open && previousValueRef.current !== value) {
-      setOpen(false)
-    }
-    previousValueRef.current = value
-  }, [open, value])
-
-  useEffect(() => {
-    if (!open) return
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    window.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open])
-
   return (
-    <div className={`gallery-select ${className}`} ref={rootRef}>
+    <div className={`gallery-select ${className}`} ref={dropdown.rootRef}>
       <button
         type="button"
         className="gallery-select-trigger"
         aria-label={ariaLabel}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        aria-expanded={dropdown.open}
+        onClick={dropdown.toggle}
       >
         <span>{selectedOption?.label || ariaLabel}</span>
         <ChevronDown size={14} />
       </button>
-      {open ? (
+      {dropdown.open ? (
         <div className="gallery-select-menu" role="listbox" aria-label={ariaLabel}>
           {options.map((option) => {
             const selected = option.value === value
@@ -72,10 +46,13 @@ export function GallerySelect<T extends string | number>({
                 className={selected ? 'selected' : ''}
                 role="option"
                 aria-selected={selected}
-                onClick={() => {
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  dropdown.close()
                   onChange(option.value)
-                  setOpen(false)
                 }}
+                onClick={(event) => event.stopPropagation()}
               >
                 <span>{option.label}</span>
                 {selected ? <Check size={13} /> : null}

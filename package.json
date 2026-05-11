@@ -7,6 +7,7 @@
   "homepage": "./",
   "packageManager": "pnpm@10.26.2",
   "scripts": {
+    "predev": "node scripts/rebuild-native.mjs",
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
     "preview": "electron-vite preview",
@@ -57,11 +58,13 @@
     "win": {
       "icon": "src/renderer/src/assets/icon.ico",
       "signAndEditExecutable": false,
+      "artifactName": "${productName} Setup ${version}-${arch}.${ext}",
       "target": [
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "ia32"
           ]
         }
       ]

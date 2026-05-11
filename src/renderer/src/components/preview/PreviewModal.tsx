@@ -86,8 +86,8 @@ export function PreviewModal({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (fullscreen) {
-          setFullscreen(false)
+        if (document.fullscreenElement === panelRef.current) {
+          void document.exitFullscreen()
           return
         }
         onClose()
@@ -97,13 +97,21 @@ export function PreviewModal({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canGoNext, canGoPrevious, currentIndex, fullscreen, items, onClose])
+  }, [canGoNext, canGoPrevious, currentIndex, items, onClose])
 
   useEffect(() => {
     if (!imageSize) return
     setZoom(getPreviewFitZoom(imageSize, artSize))
     setPan({ x: 0, y: 0 })
   }, [artSize, imageSize])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === panelRef.current)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -162,12 +170,20 @@ export function PreviewModal({
   }
 
   const toggleFullscreen = async () => {
-    setFullscreen((value) => !value)
+    try {
+      if (document.fullscreenElement === panelRef.current) {
+        await document.exitFullscreen()
+      } else {
+        await panelRef.current?.requestFullscreen()
+      }
+    } catch (error) {
+      notify(error instanceof Error ? `全屏切换失败：${error.message}` : '全屏切换失败')
+    }
   }
 
   const content = (
     <div
-      className={`modal open ${fullscreen ? 'fullscreen-preview' : ''}`}
+      className="modal open"
       onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >

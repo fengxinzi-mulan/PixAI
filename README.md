@@ -98,17 +98,17 @@ dist/
 Windows 安装包文件名会包含架构后缀，例如：
 
 ```text
-PixAI Setup 1.1.1-x64.exe
-PixAI Setup 1.1.1-ia32.exe
+PixAI Setup 1.1.2-x64.exe
+PixAI Setup 1.1.2-ia32.exe
 ```
 
 macOS 安装包文件名会包含平台和架构后缀，例如：
 
 ```text
-PixAI-1.1.1-mac-x64.dmg
-PixAI-1.1.1-mac-arm64.dmg
-PixAI-1.1.1-mac-x64.zip
-PixAI-1.1.1-mac-arm64.zip
+PixAI-1.1.2-mac-x64.dmg
+PixAI-1.1.2-mac-arm64.dmg
+PixAI-1.1.2-mac-x64.zip
+PixAI-1.1.2-mac-arm64.zip
 ```
 
 ## 发布 Releases
@@ -119,8 +119,8 @@ GitHub Releases 由 `.github/workflows/release.yml` 自动完成。
 2. 创建并推送 tag：
 
 ```powershell
-git tag v1.1.1
-git push origin v1.1.1
+git tag v1.1.2
+git push origin v1.1.2
 ```
 
 也可以在 GitHub Actions 页面手动运行 workflow，并填写 `tag`。
@@ -145,7 +145,9 @@ PixAI-<version>-mac-arm64.zip
 
 ## 本地数据
 
-开发环境下，数据保存在项目根目录的 `data/` 目录。Windows 打包安装后，数据保存在安装目录下的 `data/` 目录；macOS 打包后，数据保存在应用的用户数据目录下。
+开发环境下，数据保存在项目根目录的 `data/` 目录。Windows 打包安装后，数据保存在安装目录同级的 `PixAI-data/` 目录，例如安装到 `D:\Apps\PixAI` 时数据目录为 `D:\Apps\PixAI-data`；macOS 打包后，数据保存在应用的用户数据目录下。
+
+从旧版本升级时，如果发现旧的 `安装目录\data` 存在且新的 `PixAI-data/` 尚未初始化，应用会在启动时自动迁移旧数据，避免安装新版时清空历史。
 
 ```text
 data/

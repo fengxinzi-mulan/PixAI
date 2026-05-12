@@ -12,7 +12,7 @@ import type {
 } from '@shared/types'
 import { AppDatabase } from './database'
 import { copySelectedHistoryImages } from './batch-download'
-import { resolveDataDir } from './data-path'
+import { prepareDataDir } from './data-path'
 import { ImageService } from './image-service'
 import { PromptService } from './prompt-service'
 import { SettingsStore } from './settings'
@@ -36,7 +36,7 @@ let imageService: ImageService
 let promptService: PromptService
 
 function getDataDir(): string {
-  return resolveDataDir({
+  return prepareDataDir({
     cwd: process.cwd(),
     packaged: app.isPackaged,
     exePath: app.getPath('exe'),

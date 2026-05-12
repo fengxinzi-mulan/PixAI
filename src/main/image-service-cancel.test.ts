@@ -4,6 +4,17 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ImageService } from './image-service'
 
+function neverEndingEventStreamResponse(): Response {
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"progress"}\n\n'))
+    }
+  }), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' }
+  })
+}
+
 describe('image service cancellation', () => {
   it('aborts a single active request when no request index is provided', async () => {
     const abortSpy = vi.fn()
@@ -148,20 +159,11 @@ describe('image service cancellation', () => {
       createdAt: new Date().toISOString(),
       items: []
     }
-    let requestCount = 0
-    globalThis.fetch = vi.fn((_url, init) => {
-      requestCount += 1
-      const signal = (init as RequestInit).signal
-      if (requestCount === 2) {
-        return new Promise<Response>((_resolve, reject) => {
-          signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-        })
-      }
-
-      return Promise.resolve(new Response(JSON.stringify({
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({
         data: [{ b64_json: Buffer.from('image').toString('base64') }]
       }), { status: 200 }))
-    }) as typeof fetch
+    ) as typeof fetch
 
     try {
       const imageService = new ImageService(
@@ -200,8 +202,76 @@ describe('image service cancellation', () => {
 
       expect(result.items).toHaveLength(2)
       expect(result.items.map((item) => item.status)).toEqual(['succeeded', 'succeeded'])
+      expect(result.items.map((item) => item.requestIndex)).toEqual([0, 2])
       expect(historyItems).toHaveLength(2)
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
       expect(result.canceled).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not fallback after a user cancels an active streamed request', async () => {
+    const originalFetch = globalThis.fetch
+    const historyItems: Array<Record<string, unknown>> = []
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+    globalThis.fetch = vi.fn(() => Promise.resolve(neverEndingEventStreamResponse())) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({
+            autoSaveHistory: true
+          }),
+          insertRun: () => run,
+          insertHistory: vi.fn((input) => {
+            const item = { ...input, favorite: false }
+            historyItems.push(item)
+            return item
+          }),
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: historyItems })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-cancel-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        stream: true
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      imageService.cancelRunGeneration(run.id, 0)
+      const result = await resultPromise
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      expect(historyItems).toHaveLength(0)
+      expect(result.canceled).toBe(true)
     } finally {
       globalThis.fetch = originalFetch
     }

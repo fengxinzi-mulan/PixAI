@@ -368,6 +368,16 @@ button:disabled {
   color: #2b8b6b;
 }
 
+.session-loading-indicator {
+  width: 13px;
+  height: 13px;
+  display: block;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.82;
+  animation: session-loading-pulse 1.6s steps(4, end) infinite;
+}
+
 .dark .session-loading-slot {
   color: #8ce0bd;
 }
@@ -2994,6 +3004,14 @@ textarea {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes session-loading-pulse {
+  0% { opacity: 0.22; transform: scale(0.7); }
+  25% { opacity: 0.5; transform: scale(0.82); }
+  50% { opacity: 0.82; transform: scale(1); }
+  75% { opacity: 0.5; transform: scale(0.82); }
+  100% { opacity: 0.22; transform: scale(0.7); }
 }
 
 @media (max-width: 1180px) {

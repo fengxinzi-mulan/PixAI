@@ -415,7 +415,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       background: conversation.background,
       moderation: conversation.moderation,
       stream: conversation.stream,
-      partialImages: conversation.partialImages ?? undefined,
+      partialImages: conversation.stream && conversation.partialImages ? conversation.partialImages : undefined,
       inputFidelity: conversation.inputFidelity ?? undefined,
       outputFormat: conversation.outputFormat || DEFAULT_IMAGE_OUTPUT_FORMAT,
       referenceImageIds: conversation.referenceImages.map((reference) => reference.id)

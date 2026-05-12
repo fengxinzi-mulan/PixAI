@@ -21,8 +21,43 @@ function imageResponse(): Response {
   }), { status: 200 })
 }
 
+function eventStreamResponse(events: unknown[]): Response {
+  const body = events
+    .map((event) => `data: ${typeof event === 'string' ? event : JSON.stringify(event)}\n\n`)
+    .join('')
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' }
+  })
+}
+
+function neverEndingEventStreamResponse(): Response {
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"progress"}\n\n'))
+    }
+  }), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' }
+  })
+}
+
 function nextTask(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitForExpect(expectation: () => void, attempts = 20): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      expectation()
+      return
+    } catch (error) {
+      lastError = error
+      await nextTask()
+    }
+  }
+  throw lastError
 }
 
 describe('image service progress', () => {
@@ -146,7 +181,9 @@ describe('image service progress', () => {
 
       await Promise.resolve()
       first.resolve(imageResponse())
-      await nextTask()
+      await waitForExpect(() => {
+        expect(insertHistory).toHaveBeenCalledTimes(1)
+      })
 
       expect(insertHistory).toHaveBeenCalledTimes(1)
 
@@ -156,6 +193,80 @@ describe('image service progress', () => {
       expect(insertHistory).toHaveBeenCalledTimes(2)
       expect(insertHistory.mock.calls.map(([input]) => input.requestIndex)).toEqual([0, 1])
       expect(insertHistory.mock.calls.every(([input]) => input.durationMs >= 0)).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('serializes every multi-image request to avoid blocking the app', async () => {
+    const originalFetch = globalThis.fetch
+    const responses = [deferredResponse(), deferredResponse(), deferredResponse()]
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 3,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    let requestIndex = 0
+    globalThis.fetch = vi.fn(() => responses[requestIndex++].promise) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 3,
+        outputFormat: 'jpeg',
+        stream: false
+      })
+
+      await waitForExpect(() => {
+        expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      })
+      responses[0].resolve(imageResponse())
+      await waitForExpect(() => {
+        expect(insertHistory).toHaveBeenCalledTimes(1)
+        expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      })
+      responses[1].resolve(imageResponse())
+      await waitForExpect(() => {
+        expect(insertHistory).toHaveBeenCalledTimes(2)
+        expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+      })
+      responses[2].resolve(imageResponse())
+      await resultPromise
+
+      expect(insertHistory).toHaveBeenCalledTimes(3)
+      expect(insertHistory.mock.calls.map(([input]) => input.requestIndex)).toEqual([0, 1, 2])
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -214,6 +325,264 @@ describe('image service progress', () => {
       })
 
       expect(insertHistory.mock.calls[0][0].filePath).toMatch(/\.jpg$/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('falls back to a non-stream request when a streamed response has no image payload', async () => {
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(eventStreamResponse([{ type: 'progress', percent: 100 }, '[DONE]']))
+      .mockResolvedValueOnce(imageResponse()) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      await imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        outputFormat: 'png',
+        stream: true
+      })
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      const firstBody = JSON.parse(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body))
+      const retryBody = JSON.parse(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body))
+      expect(firstBody.stream).toBe(true)
+      expect(retryBody.stream).toBeUndefined()
+      expect(insertHistory).toHaveBeenCalledTimes(1)
+      expect(insertHistory.mock.calls[0][0].status).toBe('succeeded')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('falls back when a streamed response stays open without image payloads', async () => {
+    vi.useFakeTimers()
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(neverEndingEventStreamResponse())
+      .mockResolvedValueOnce(imageResponse()) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        outputFormat: 'png',
+        stream: true
+      })
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      const result = await resultPromise
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      expect(insertHistory).toHaveBeenCalledTimes(1)
+      expect(result.items[0]?.status).toBe('succeeded')
+    } finally {
+      globalThis.fetch = originalFetch
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails a request after the five minute generation timeout', async () => {
+    vi.useFakeTimers()
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn((_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = (init as RequestInit).signal
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    ) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        outputFormat: 'png',
+        stream: true
+      })
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      const result = await resultPromise
+
+      expect(result.items[0]?.status).toBe('failed')
+      expect(result.items[0]?.errorMessage).toBe('Image generation timed out after 5 minutes.')
+      expect(result.items[0]?.errorDetails).toContain('"stage": "timeout"')
+      expect(result.items[0]?.errorDetails).toContain('"timeoutMs": 300000')
+    } finally {
+      globalThis.fetch = originalFetch
+      vi.useRealTimers()
+    }
+  })
+
+  it('extracts image data from compatible nonstandard stream fields', async () => {
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(eventStreamResponse([
+        { type: 'partial', partial_image_b64: Buffer.from('partial-image').toString('base64') },
+        { type: 'completed', image_url: `data:image/png;base64,${Buffer.from('final-image').toString('base64')}` },
+        '[DONE]'
+      ]))
+    ) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      await imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        outputFormat: 'png',
+        stream: true
+      })
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      expect(insertHistory).toHaveBeenCalledTimes(1)
+      expect(insertHistory.mock.calls[0][0].fileSizeBytes).toBe(Buffer.byteLength('final-image'))
     } finally {
       globalThis.fetch = originalFetch
     }

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { collectImageData } from './image-response'
 
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('collectImageData', () => {
-  it('requests n single-image batches concurrently', async () => {
+  it('requests n single-image batches serially', async () => {
     let calls = 0
     let inFlight = 0
     let maxInFlight = 0
@@ -21,11 +25,17 @@ describe('collectImageData', () => {
       })
     })
 
-    expect(calls).toBe(3)
-    expect(maxInFlight).toBe(3)
+    expect(calls).toBe(1)
+    expect(maxInFlight).toBe(1)
 
     resolvers[0]([{ b64_json: 'image-1' }])
+    await nextTask()
+    expect(calls).toBe(2)
+
     resolvers[1]([{ b64_json: 'image-2' }])
+    await nextTask()
+    expect(calls).toBe(3)
+
     resolvers[2]([{ b64_json: 'image-3' }])
 
     await expect(promise).resolves.toEqual([

@@ -176,7 +176,8 @@ export function buildImageRequestBody(input: GenerateImageInput): Record<string,
   if (toOptionalNumber(input.outputCompression) != null) body.output_compression = input.outputCompression
   if (input.background) body.background = input.background
   if (input.moderation) body.moderation = input.moderation
+  const partialImages = toOptionalNumber(input.partialImages)
   if (input.stream) body.stream = true
-  if (toOptionalNumber(input.partialImages) != null) body.partial_images = input.partialImages
+  if (input.stream && partialImages != null && partialImages > 0) body.partial_images = partialImages
   return body
 }

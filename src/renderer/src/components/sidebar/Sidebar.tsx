@@ -38,7 +38,7 @@ export function Sidebar(): JSX.Element {
                   {conversation.draftPrompt || conversation.title}
                 </span>
                 <span className="session-loading-slot">
-                  {row.generating ? <Loader2 className="session-loading" size={13} aria-label="生成中" /> : null}
+                  {row.generating ? <span className="session-loading-indicator" aria-label="生成中" /> : null}
                 </span>
                 <span
                   className="icon-only danger session-delete"

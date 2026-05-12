@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import {
   buildImageEditEndpoint,
@@ -32,6 +33,34 @@ type ImageApiResponse = {
     code?: string
     param?: string
   }
+}
+
+const STREAM_IDLE_TIMEOUT_MS = 60_000
+const IMAGE_REQUEST_TIMEOUT_MS = 300_000
+
+type ImageRequestDiagnostics = {
+  streamFallback?: {
+    reason: 'stream-idle-timeout' | 'stream-empty'
+    fallbackExecuted: boolean
+    idleTimeoutMs: number
+  }
+}
+
+type ImageRequestResult = {
+  images: ImageResponseData[]
+  diagnostics?: ImageRequestDiagnostics
+}
+
+type StreamedImageDataResult = {
+  images: ImageResponseData[]
+  timedOut: boolean
+}
+
+type RequestAbortScope = {
+  signal: AbortSignal
+  userSignal: AbortSignal
+  timedOut: () => boolean
+  cleanup: () => void
 }
 
 export class ImageService {
@@ -91,16 +120,26 @@ export class ImageService {
       const items: ImageHistoryItem[] = []
       let succeededCount = 0
       let canceledCount = 0
-      await Promise.all(
-        requestControllers.map(async ({ controller }, requestIndex) => {
+      await runWithConcurrency(
+        requestControllers,
+        1,
+        async ({ controller }, requestIndex) => {
+          if (controller.signal.aborted) {
+            canceledCount += 1
+            return null
+          }
+
+          const requestScope = createRequestAbortScope(controller.signal, IMAGE_REQUEST_TIMEOUT_MS)
           try {
-            const imageData = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, referenceImages, controller.signal)
+            const requestResult = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, referenceImages, requestScope)
+            const imageData = requestResult.images
             const image = imageData.at(-1)
             if (!image) {
               const durationMs = elapsedMs(startedAtMs)
               const item = this.createFailureItem(input, run, model, 'The image API returned no images.', 'empty-data', {
                 endpoint,
-                requestIndex
+                requestIndex,
+                ...requestResult.diagnostics
               }, new Date().toISOString(), durationMs)
               items.push(item)
               return item
@@ -140,6 +179,16 @@ export class ImageService {
             }
 
             const durationMs = elapsedMs(startedAtMs)
+            if (requestScope.timedOut()) {
+              const item = this.createFailureItem(input, run, model, 'Image generation timed out after 5 minutes.', 'timeout', {
+                endpoint,
+                requestIndex,
+                timeoutMs: IMAGE_REQUEST_TIMEOUT_MS
+              }, new Date().toISOString(), durationMs)
+              items.push(item)
+              return item
+            }
+
             if (error instanceof ImageHttpError) {
               const item = this.createFailureItem(input, run, model, error.message, 'http', {
                 ...error.details,
@@ -155,8 +204,10 @@ export class ImageService {
             }, new Date().toISOString(), durationMs)
             items.push(item)
             return item
+          } finally {
+            requestScope.cleanup()
           }
-        })
+        }
       )
 
       const failedCount = items.length - succeededCount
@@ -220,15 +271,23 @@ export class ImageService {
     image: ImageResponseData,
     outputFormat: ImageOutputFormat
   ): Promise<{ filePath: string; fileSizeBytes: number }> {
-    mkdirSync(this.database.imagesDir, { recursive: true })
+    await mkdir(this.database.imagesDir, { recursive: true })
     if (image.b64_json) {
       const filePath = join(this.database.imagesDir, `${id}${extensionFromOutputFormat(outputFormat)}`)
       const fileBuffer = Buffer.from(image.b64_json, 'base64')
-      writeFileSync(filePath, fileBuffer)
+      await writeFile(filePath, fileBuffer)
       return { filePath, fileSizeBytes: fileBuffer.length }
     }
 
     if (image.url) {
+      const dataUrlImage = parseImageDataUrl(image.url)
+      if (dataUrlImage) {
+        const filePath = join(this.database.imagesDir, `${id}${extensionFromContentType(dataUrlImage.contentType) || extensionFromOutputFormat(outputFormat)}`)
+        const fileBuffer = Buffer.from(dataUrlImage.base64, 'base64')
+        await writeFile(filePath, fileBuffer)
+        return { filePath, fileSizeBytes: fileBuffer.length }
+      }
+
       const response = await fetch(image.url)
       if (!response.ok) throw new Error(`Unable to download generated image: HTTP ${response.status}.`)
       const contentType = response.headers.get('content-type') || ''
@@ -236,7 +295,7 @@ export class ImageService {
       const extension = extensionFromContentType(contentType) || extname(urlPath) || '.png'
       const filePath = join(this.database.imagesDir, `${id}${extension}`)
       const fileBuffer = Buffer.from(await response.arrayBuffer())
-      writeFileSync(filePath, fileBuffer)
+      await writeFile(filePath, fileBuffer)
       return { filePath, fileSizeBytes: fileBuffer.length }
     }
 
@@ -248,42 +307,58 @@ export class ImageService {
     apiKey: string,
     input: GenerateImageInput,
     referenceImages: ReferenceImage[],
-    signal: AbortSignal
-  ): Promise<ImageResponseData[]> {
+    scope: RequestAbortScope,
+    diagnostics: ImageRequestDiagnostics = {}
+  ): Promise<ImageRequestResult> {
     if (referenceImages.length > 0) {
-      return this.requestImageEditBatch(endpoint, apiKey, input, referenceImages, signal)
+      return this.requestImageEditBatch(endpoint, apiKey, input, referenceImages, scope, diagnostics)
     }
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      signal,
-      body: JSON.stringify(buildImageRequestBody(input))
-    })
-    const contentType = response.headers.get('content-type') || ''
-    if (!response.ok) {
-      const responseText = await response.text()
-      const { payload, parseError } = this.parseResponse(responseText)
-      throw new ImageHttpError(payload.error?.message || `Image generation failed with HTTP ${response.status}.`, {
-        endpoint,
-        httpStatus: response.status,
-        httpStatusText: response.statusText,
-        responseError: payload.error,
-        responseBody: responseText,
-        parseError
+    const attempt = createLinkedAbortController(scope.signal)
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal: attempt.signal,
+        body: JSON.stringify(buildImageRequestBody(input))
       })
-    }
+      const contentType = response.headers.get('content-type') || ''
+      if (!response.ok) {
+        const responseText = await response.text()
+        const { payload, parseError } = this.parseResponse(responseText)
+        throw new ImageHttpError(payload.error?.message || `Image generation failed with HTTP ${response.status}.`, {
+          endpoint,
+          httpStatus: response.status,
+          httpStatusText: response.statusText,
+          responseError: payload.error,
+          responseBody: responseText,
+          parseError,
+          ...diagnostics
+        })
+      }
 
-    if (input.stream && contentType.includes('text/event-stream')) {
-      return this.readStreamedImageData(response)
-    }
+      if (input.stream && contentType.includes('text/event-stream')) {
+        const streamed = await this.readStreamedImageData(response, attempt.controller)
+        if (streamed.images.length > 0 || scope.signal.aborted) {
+          return { images: streamed.images, diagnostics }
+        }
 
-    const responseText = await response.text()
-    const { payload } = this.parseResponse(responseText)
-    return payload.data || []
+        const nextDiagnostics = withStreamFallbackDiagnostics(
+          diagnostics,
+          streamed.timedOut ? 'stream-idle-timeout' : 'stream-empty'
+        )
+        return this.requestImageBatch(endpoint, apiKey, disableStreaming(input), referenceImages, scope, nextDiagnostics)
+      }
+
+      const responseText = await response.text()
+      const { payload } = this.parseResponse(responseText)
+      return { images: payload.data || [], diagnostics }
+    } finally {
+      attempt.cleanup()
+    }
   }
 
   private async requestImageEditBatch(
@@ -291,8 +366,9 @@ export class ImageService {
     apiKey: string,
     input: GenerateImageInput,
     referenceImages: ReferenceImage[],
-    signal: AbortSignal
-  ): Promise<ImageResponseData[]> {
+    scope: RequestAbortScope,
+    diagnostics: ImageRequestDiagnostics = {}
+  ): Promise<ImageRequestResult> {
     const formData = new FormData()
     formData.set('prompt', input.prompt.trim())
     formData.set('model', input.model.trim())
@@ -306,7 +382,7 @@ export class ImageService {
     if (input.background) formData.set('background', input.background)
     if (input.moderation) formData.set('moderation', input.moderation)
     if (input.stream) formData.set('stream', 'true')
-    if (input.partialImages != null && Number.isFinite(input.partialImages)) {
+    if (input.stream && input.partialImages != null && Number.isFinite(input.partialImages) && input.partialImages > 0) {
       formData.set('partial_images', String(input.partialImages))
     }
     if (input.inputFidelity && supportsImageInputFidelity(input.model)) {
@@ -318,35 +394,50 @@ export class ImageService {
       formData.append('image[]', new Blob([fileBuffer], { type: referenceImage.mimeType }), referenceImage.name)
     }
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`
-      },
-      signal,
-      body: formData
-    })
-    const contentType = response.headers.get('content-type') || ''
-    if (!response.ok) {
-      const responseText = await response.text()
-      const { payload, parseError } = this.parseResponse(responseText)
-      throw new ImageHttpError(payload.error?.message || `Image edit failed with HTTP ${response.status}.`, {
-        endpoint,
-        httpStatus: response.status,
-        httpStatusText: response.statusText,
-        responseError: payload.error,
-        responseBody: responseText,
-        parseError
+    const attempt = createLinkedAbortController(scope.signal)
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`
+        },
+        signal: attempt.signal,
+        body: formData
       })
-    }
+      const contentType = response.headers.get('content-type') || ''
+      if (!response.ok) {
+        const responseText = await response.text()
+        const { payload, parseError } = this.parseResponse(responseText)
+        throw new ImageHttpError(payload.error?.message || `Image edit failed with HTTP ${response.status}.`, {
+          endpoint,
+          httpStatus: response.status,
+          httpStatusText: response.statusText,
+          responseError: payload.error,
+          responseBody: responseText,
+          parseError,
+          ...diagnostics
+        })
+      }
 
-    if (input.stream && contentType.includes('text/event-stream')) {
-      return this.readStreamedImageData(response)
-    }
+      if (input.stream && contentType.includes('text/event-stream')) {
+        const streamed = await this.readStreamedImageData(response, attempt.controller)
+        if (streamed.images.length > 0 || scope.signal.aborted) {
+          return { images: streamed.images, diagnostics }
+        }
 
-    const responseText = await response.text()
-    const { payload } = this.parseResponse(responseText)
-    return payload.data || []
+        const nextDiagnostics = withStreamFallbackDiagnostics(
+          diagnostics,
+          streamed.timedOut ? 'stream-idle-timeout' : 'stream-empty'
+        )
+        return this.requestImageEditBatch(endpoint, apiKey, disableStreaming(input), referenceImages, scope, nextDiagnostics)
+      }
+
+      const responseText = await response.text()
+      const { payload } = this.parseResponse(responseText)
+      return { images: payload.data || [], diagnostics }
+    } finally {
+      attempt.cleanup()
+    }
   }
 
   private saveFailure(
@@ -423,34 +514,58 @@ export class ImageService {
     }
   }
 
-  private async readStreamedImageData(response: Response): Promise<ImageResponseData[]> {
+  private async readStreamedImageData(response: Response, attemptController: AbortController): Promise<StreamedImageDataResult> {
     if (!response.body) {
       throw new Error('The image stream response had no body.')
     }
 
-    const images: ImageResponseData[] = []
+    let latestImage: ImageResponseData | null = null
+    let lastImageAt = Date.now()
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
 
+    const consumePayload = (data: string) => {
+      const trimmed = data.trim()
+      if (!trimmed || trimmed === '[DONE]') return
+      for (const payload of parseStreamPayloads(trimmed)) {
+        const images = extractImageResponseData(payload)
+        if (images.length > 0) {
+          latestImage = images.at(-1) || latestImage
+          lastImageAt = Date.now()
+        }
+      }
+    }
+
     const consumeBlock = (block: string) => {
-      const data = block
+      const dataLines = block
         .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-        .join('\n')
-        .trim()
-      if (!data || data === '[DONE]') return
-      try {
-        const payload = JSON.parse(data)
-        images.push(...extractImageResponseData(payload))
-      } catch {
-        // Ignore non-JSON stream chunks.
+        .filter((line) => line.trimStart().startsWith('data:'))
+        .map((line) => line.trimStart().slice(5).trimStart())
+      if (dataLines.length > 0) {
+        consumePayload(dataLines.join('\n'))
+        return
+      }
+
+      for (const line of block.split('\n')) {
+        consumePayload(line)
       }
     }
 
     while (true) {
-      const { done, value } = await reader.read()
+      const remainingMs = STREAM_IDLE_TIMEOUT_MS - (Date.now() - lastImageAt)
+      if (remainingMs <= 0) {
+        await cancelStreamReader(reader, attemptController)
+        return { images: latestImage ? [latestImage] : [], timedOut: true }
+      }
+
+      const result = await readStreamChunk(reader, remainingMs, attemptController.signal)
+      if (result.timedOut) {
+        await cancelStreamReader(reader, attemptController)
+        return { images: latestImage ? [latestImage] : [], timedOut: true }
+      }
+
+      const { done, value } = result.chunk
       if (done) break
       buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
       let separatorIndex = buffer.indexOf('\n\n')
@@ -466,7 +581,131 @@ export class ImageService {
       consumeBlock(buffer)
     }
 
-    return images
+    return { images: latestImage ? [latestImage] : [], timedOut: false }
+  }
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<unknown>
+): Promise<void> {
+  const workerCount = Math.min(items.length, Math.max(1, concurrency))
+  let nextIndex = 0
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const index = nextIndex
+        nextIndex += 1
+        if (index >= items.length) return
+        await worker(items[index] as T, index)
+      }
+    })
+  )
+}
+
+function createRequestAbortScope(userSignal: AbortSignal, timeoutMs: number): RequestAbortScope {
+  const controller = new AbortController()
+  let timedOut = false
+  const abortFromUser = () => controller.abort(userSignal.reason)
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort(new DOMException('Image generation timed out.', 'TimeoutError'))
+  }, timeoutMs)
+
+  if (userSignal.aborted) {
+    abortFromUser()
+  } else {
+    userSignal.addEventListener('abort', abortFromUser, { once: true })
+  }
+
+  return {
+    signal: controller.signal,
+    userSignal,
+    timedOut: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timeout)
+      userSignal.removeEventListener('abort', abortFromUser)
+    }
+  }
+}
+
+function createLinkedAbortController(parentSignal: AbortSignal): {
+  controller: AbortController
+  signal: AbortSignal
+  cleanup: () => void
+} {
+  const controller = new AbortController()
+  const abortFromParent = () => controller.abort(parentSignal.reason)
+  if (parentSignal.aborted) {
+    abortFromParent()
+  } else {
+    parentSignal.addEventListener('abort', abortFromParent, { once: true })
+  }
+  return {
+    controller,
+    signal: controller.signal,
+    cleanup: () => parentSignal.removeEventListener('abort', abortFromParent)
+  }
+}
+
+function withStreamFallbackDiagnostics(
+  diagnostics: ImageRequestDiagnostics,
+  reason: 'stream-idle-timeout' | 'stream-empty'
+): ImageRequestDiagnostics {
+  return {
+    ...diagnostics,
+    streamFallback: {
+      reason,
+      fallbackExecuted: true,
+      idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS
+    }
+  }
+}
+
+async function readStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs: number,
+  signal: AbortSignal
+): Promise<
+  | { timedOut: false; chunk: ReadableStreamReadResult<Uint8Array> }
+  | { timedOut: true }
+> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  let cleanupAbort = (): void => undefined
+  try {
+    if (signal.aborted) {
+      throw signal.reason || new DOMException('Aborted', 'AbortError')
+    }
+    return await Promise.race([
+      reader.read().then((chunk) => ({ timedOut: false as const, chunk })),
+      new Promise<{ timedOut: true }>((resolve) => {
+        timeout = setTimeout(() => resolve({ timedOut: true }), Math.max(0, timeoutMs))
+      }),
+      new Promise<never>((_resolve, reject) => {
+        const abort = () => {
+          void reader.cancel().catch(() => undefined)
+          reject(signal.reason || new DOMException('Aborted', 'AbortError'))
+        }
+        signal.addEventListener('abort', abort, { once: true })
+        cleanupAbort = () => signal.removeEventListener('abort', abort)
+      })
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+    cleanupAbort()
+  }
+}
+
+async function cancelStreamReader(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  attemptController: AbortController
+): Promise<void> {
+  attemptController.abort(new DOMException('Image stream idle timeout.', 'TimeoutError'))
+  try {
+    await reader.cancel()
+  } catch {
+    // The fetch abort may already have closed the stream.
   }
 }
 
@@ -481,6 +720,19 @@ function extensionFromOutputFormat(format: ImageOutputFormat): string {
   if (format === 'jpeg') return '.jpg'
   if (format === 'webp') return '.webp'
   return '.png'
+}
+
+function parseImageDataUrl(value: string): { contentType: string; base64: string } | null {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(value.trim())
+  return match ? { contentType: match[1], base64: match[2] } : null
+}
+
+function disableStreaming(input: GenerateImageInput): GenerateImageInput {
+  return {
+    ...input,
+    stream: false,
+    partialImages: undefined
+  }
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
@@ -516,10 +768,12 @@ function extractImageResponseData(value: unknown): ImageResponseData[] {
     }
 
     const record = node as Record<string, unknown>
-    if (typeof record.b64_json === 'string' || typeof record.url === 'string') {
+    const directBase64 = getImageBase64Value(record)
+    const directUrl = getImageUrlValue(record)
+    if (directBase64 || directUrl) {
       images.push({
-        ...(typeof record.b64_json === 'string' ? { b64_json: record.b64_json } : {}),
-        ...(typeof record.url === 'string' ? { url: record.url } : {})
+        ...(directBase64 ? { b64_json: directBase64 } : {}),
+        ...(directUrl ? { url: directUrl } : {})
       })
     }
 
@@ -530,6 +784,78 @@ function extractImageResponseData(value: unknown): ImageResponseData[] {
 
   visit(value)
   return images
+}
+
+function parseStreamPayloads(data: string): unknown[] {
+  const parsed = tryParseJson(data)
+  if (parsed !== null) return [parsed]
+
+  return data
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => tryParseJson(line))
+    .filter((value): value is unknown => value !== null)
+}
+
+function tryParseJson(value: string): unknown | null {
+  if (!value.startsWith('{') && !value.startsWith('[')) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function getImageBase64Value(record: Record<string, unknown>): string | null {
+  const directKeys = ['b64_json', 'b64', 'base64', 'image_b64', 'image_base64', 'partial_image_b64']
+  for (const key of directKeys) {
+    const value = normalizeBase64Image(record[key])
+    if (value) return value
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (!isImageLikeKey(key)) continue
+    const normalized = normalizeBase64Image(value)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function getImageUrlValue(record: Record<string, unknown>): string | null {
+  const directKeys = ['url', 'image_url', 'output_url']
+  for (const key of directKeys) {
+    const value = normalizeImageUrl(record[key])
+    if (value) return value
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (!isImageLikeKey(key)) continue
+    const normalized = normalizeImageUrl(value)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function normalizeBase64Image(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const dataUrlMatch = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/i.exec(value.trim())
+  const candidate = dataUrlMatch ? dataUrlMatch[1] : value.trim()
+  if (candidate.length < 80) return null
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(candidate)) return null
+  return candidate
+}
+
+function normalizeImageUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) return trimmed
+  return null
+}
+
+function isImageLikeKey(key: string): boolean {
+  return /image|img|picture|output|result/i.test(key)
 }
 
 class ImageHttpError extends Error {

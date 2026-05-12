@@ -12,9 +12,10 @@ export async function collectImageData(
     return (await requestImages(1)).slice(0, 1)
   }
 
-  const batches = await Promise.all(
-    Array.from({ length: target }, () => requestImages(1))
-  )
+  const batches: ImageResponseData[][] = []
+  for (let index = 0; index < target; index += 1) {
+    batches.push(await requestImages(1))
+  }
 
   return batches.flatMap((batch) => batch.slice(0, 1))
 }

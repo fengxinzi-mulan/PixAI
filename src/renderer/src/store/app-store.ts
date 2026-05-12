@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { formatDuration } from '@shared/duration'
-import { DEFAULT_IMAGE_OUTPUT_FORMAT, DEFAULT_MODEL, getDefaultImageSize } from '@shared/image-options'
+import {
+  DEFAULT_IMAGE_OUTPUT_FORMAT,
+  DEFAULT_MODEL,
+  MAX_IMAGE_MAX_RETRIES,
+  getDefaultImageSize,
+  normalizeImageGenerationTimeoutSeconds
+} from '@shared/image-options'
 import type {
   Conversation,
   ConversationCreateInput,
@@ -182,6 +188,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       stream: template.stream ?? current?.stream,
       partialImages: template.partialImages ?? current?.partialImages,
       inputFidelity: template.inputFidelity ?? current?.inputFidelity,
+      maxRetries: template.maxRetries ?? current?.maxRetries,
+      generationTimeoutSeconds: template.generationTimeoutSeconds ?? current?.generationTimeoutSeconds,
       autoSaveHistory: template.autoSaveHistory ?? current?.autoSaveHistory,
       keepFailureDetails: template.keepFailureDetails ?? current?.keepFailureDetails
     })
@@ -214,6 +222,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         stream: deletedConversation?.stream,
         partialImages: deletedConversation?.partialImages,
         inputFidelity: deletedConversation?.inputFidelity,
+        maxRetries: deletedConversation?.maxRetries,
+        generationTimeoutSeconds: deletedConversation?.generationTimeoutSeconds,
         autoSaveHistory: deletedConversation?.autoSaveHistory,
         keepFailureDetails: deletedConversation?.keepFailureDetails
       }, { silent: true })
@@ -238,6 +248,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (input.partialImages !== undefined) {
       normalizedBase.partialImages = normalizeConversationOptionalInteger(input.partialImages, 0, 3) ?? null
+    }
+    if (input.maxRetries !== undefined) {
+      normalizedBase.maxRetries = normalizeConversationInteger(input.maxRetries, 0, MAX_IMAGE_MAX_RETRIES) ?? 0
+    }
+    if (input.generationTimeoutSeconds !== undefined) {
+      normalizedBase.generationTimeoutSeconds = normalizeImageGenerationTimeoutSeconds(input.generationTimeoutSeconds)
     }
     const normalized =
       normalizedBase.ratio !== undefined && normalizedBase.size === undefined
@@ -417,6 +433,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       stream: conversation.stream,
       partialImages: conversation.stream && conversation.partialImages ? conversation.partialImages : undefined,
       inputFidelity: conversation.inputFidelity ?? undefined,
+      maxRetries: conversation.maxRetries,
+      generationTimeoutSeconds: conversation.generationTimeoutSeconds,
       outputFormat: conversation.outputFormat || DEFAULT_IMAGE_OUTPUT_FORMAT,
       referenceImageIds: conversation.referenceImages.map((reference) => reference.id)
     }

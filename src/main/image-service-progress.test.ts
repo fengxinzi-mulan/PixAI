@@ -198,10 +198,19 @@ describe('image service progress', () => {
     }
   })
 
-  it('serializes every multi-image request to avoid blocking the app', async () => {
+  it('starts every multi-image request so each slot can retry independently', async () => {
     const originalFetch = globalThis.fetch
-    const responses = [deferredResponse(), deferredResponse(), deferredResponse()]
+    const responses = [
+      deferredResponse(),
+      deferredResponse(),
+      deferredResponse(),
+      deferredResponse(),
+      deferredResponse(),
+      deferredResponse()
+    ]
     const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryAttempt = vi.fn()
+    const updateRunRetryFailure = vi.fn()
     const run = {
       id: 'run-1',
       conversationId: 'c1',
@@ -211,6 +220,9 @@ describe('image service progress', () => {
       size: '1024x1024',
       quality: 'auto',
       n: 3,
+      maxRetries: 1,
+      retryAttempts: {},
+      retryFailures: {},
       status: 'running',
       durationMs: null,
       errorMessage: null,
@@ -222,21 +234,23 @@ describe('image service progress', () => {
     let requestIndex = 0
     globalThis.fetch = vi.fn(() => responses[requestIndex++].promise) as unknown as typeof fetch
 
-    try {
-      const imageService = new ImageService(
-        {
-          getConversation: () => ({ autoSaveHistory: true }),
-          insertRun: () => run,
-          insertHistory,
-          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
-          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
-        } as never,
-        {
-          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
-          getApiKey: () => 'sk-test'
-        } as never
-      )
+    const imageService = new ImageService(
+      {
+        getConversation: () => ({ autoSaveHistory: true }),
+        insertRun: () => run,
+        insertHistory,
+        updateRunRetryAttempt,
+        updateRunRetryFailure,
+        updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+        imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+      } as never,
+      {
+        getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+        getApiKey: () => 'sk-test'
+      } as never
+    )
 
+    try {
       const resultPromise = imageService.generate({
         conversationId: 'c1',
         prompt: 'prompt',
@@ -246,27 +260,30 @@ describe('image service progress', () => {
         quality: 'auto',
         n: 3,
         outputFormat: 'jpeg',
-        stream: false
+        stream: false,
+        maxRetries: 1
       })
 
-      await waitForExpect(() => {
-        expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+      responses.slice(0, 3).forEach((response) => {
+        response.resolve(new Response(JSON.stringify({ error: { message: 'temporary failure' } }), {
+          status: 500,
+          statusText: 'Server Error'
+        }))
       })
-      responses[0].resolve(imageResponse())
       await waitForExpect(() => {
-        expect(insertHistory).toHaveBeenCalledTimes(1)
-        expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+        expect(updateRunRetryFailure).toHaveBeenCalledTimes(3)
+        expect(updateRunRetryAttempt).toHaveBeenCalledTimes(3)
       })
-      responses[1].resolve(imageResponse())
-      await waitForExpect(() => {
-        expect(insertHistory).toHaveBeenCalledTimes(2)
-        expect(globalThis.fetch).toHaveBeenCalledTimes(3)
-      })
-      responses[2].resolve(imageResponse())
+
+      responses.slice(3).forEach((response) => response.resolve(imageResponse()))
       await resultPromise
 
+      expect(globalThis.fetch).toHaveBeenCalledTimes(6)
       expect(insertHistory).toHaveBeenCalledTimes(3)
-      expect(insertHistory.mock.calls.map(([input]) => input.requestIndex)).toEqual([0, 1, 2])
+      expect(insertHistory.mock.calls.map(([input]) => input.requestIndex).sort()).toEqual([0, 1, 2])
+      expect(updateRunRetryFailure.mock.calls.map((call) => call[1]).sort()).toEqual([0, 1, 2])
+      expect(updateRunRetryAttempt.mock.calls.map((call) => call[1]).sort()).toEqual([0, 1, 2])
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -298,21 +315,21 @@ describe('image service progress', () => {
       }), { status: 200 }))
     ) as unknown as typeof fetch
 
-    try {
-      const imageService = new ImageService(
-        {
-          getConversation: () => ({ autoSaveHistory: true }),
-          insertRun: () => run,
-          insertHistory,
-          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
-          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
-        } as never,
-        {
-          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
-          getApiKey: () => 'sk-test'
-        } as never
-      )
+    const imageService = new ImageService(
+      {
+        getConversation: () => ({ autoSaveHistory: true }),
+        insertRun: () => run,
+        insertHistory,
+        updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+        imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+      } as never,
+      {
+        getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+        getApiKey: () => 'sk-test'
+      } as never
+    )
 
+    try {
       await imageService.generate({
         conversationId: 'c1',
         prompt: 'prompt',
@@ -354,21 +371,21 @@ describe('image service progress', () => {
       .mockResolvedValueOnce(eventStreamResponse([{ type: 'progress', percent: 100 }, '[DONE]']))
       .mockResolvedValueOnce(imageResponse()) as unknown as typeof fetch
 
-    try {
-      const imageService = new ImageService(
-        {
-          getConversation: () => ({ autoSaveHistory: true }),
-          insertRun: () => run,
-          insertHistory,
-          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
-          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
-        } as never,
-        {
-          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
-          getApiKey: () => 'sk-test'
-        } as never
-      )
+    const imageService = new ImageService(
+      {
+        getConversation: () => ({ autoSaveHistory: true }),
+        insertRun: () => run,
+        insertHistory,
+        updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+        imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+      } as never,
+      {
+        getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+        getApiKey: () => 'sk-test'
+      } as never
+    )
 
+    try {
       await imageService.generate({
         conversationId: 'c1',
         prompt: 'prompt',
@@ -457,10 +474,11 @@ describe('image service progress', () => {
     }
   })
 
-  it('fails a request after the five minute generation timeout', async () => {
+  it('fails a request after the configured generation timeout', async () => {
     vi.useFakeTimers()
     const originalFetch = globalThis.fetch
     const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryFailure = vi.fn()
     const run = {
       id: 'run-1',
       conversationId: 'c1',
@@ -474,6 +492,9 @@ describe('image service progress', () => {
       durationMs: null,
       errorMessage: null,
       errorDetails: null,
+      maxRetries: 0,
+      retryAttempts: {},
+      retryFailures: {},
       createdAt: new Date().toISOString(),
       items: []
     }
@@ -484,13 +505,15 @@ describe('image service progress', () => {
         signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
       })
     ) as unknown as typeof fetch
+    let imageService: ImageService | null = null
 
     try {
-      const imageService = new ImageService(
+      imageService = new ImageService(
         {
           getConversation: () => ({ autoSaveHistory: true }),
           insertRun: () => run,
           insertHistory,
+          updateRunRetryFailure,
           updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
           imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
         } as never,
@@ -509,16 +532,202 @@ describe('image service progress', () => {
         quality: 'auto',
         n: 1,
         outputFormat: 'png',
-        stream: true
+        stream: true,
+        generationTimeoutSeconds: 2
       })
 
-      await vi.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(2_000)
       const result = await resultPromise
 
       expect(result.items[0]?.status).toBe('failed')
-      expect(result.items[0]?.errorMessage).toBe('Image generation timed out after 5 minutes.')
+      expect(result.items[0]?.errorMessage).toBe('Image generation timed out after 2 seconds.')
       expect(result.items[0]?.errorDetails).toContain('"stage": "timeout"')
-      expect(result.items[0]?.errorDetails).toContain('"timeoutMs": 300000')
+      expect(result.items[0]?.errorDetails).toContain('"timeoutMs": 2000')
+      expect(updateRunRetryFailure).toHaveBeenCalledWith(run.id, 0, expect.objectContaining({
+        errorMessage: 'Image generation timed out after 2 seconds.'
+      }))
+    } finally {
+      globalThis.fetch = originalFetch
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives concurrent image slots independent timeout budgets', async () => {
+    vi.useFakeTimers()
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryFailure = vi.fn()
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 2,
+      maxRetries: 0,
+      retryAttempts: {},
+      retryFailures: {},
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    let fetchIndex = 0
+    globalThis.fetch = vi.fn((_url, init) => {
+      const index = fetchIndex
+      fetchIndex += 1
+      if (index === 0) {
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = (init as RequestInit).signal
+          signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        })
+      }
+      return Promise.resolve(imageResponse())
+    }) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          insertHistory,
+          updateRunRetryFailure,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 2,
+        outputFormat: 'png',
+        stream: true
+      })
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(0)
+      const result = await resultPromise
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      expect(insertHistory).toHaveBeenCalledTimes(2)
+      const historyByIndex = new Map(insertHistory.mock.calls.map(([item]) => [item.requestIndex, item]))
+      expect(historyByIndex.get(0)?.status).toBe('failed')
+      expect(historyByIndex.get(1)?.status).toBe('succeeded')
+      expect(result.items).toHaveLength(2)
+      expect(result.run.status).toBe('succeeded')
+    } finally {
+      globalThis.fetch = originalFetch
+      vi.useRealTimers()
+    }
+  })
+
+  it('restarts the timeout budget after a retry begins', async () => {
+    vi.useFakeTimers()
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryAttempt = vi.fn()
+    const updateRunRetryFailure = vi.fn()
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      maxRetries: 1,
+      retryAttempts: {},
+      retryFailures: {},
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    let fetchIndex = 0
+    globalThis.fetch = vi.fn((_url, init) => {
+      const index = fetchIndex
+      fetchIndex += 1
+      return new Promise<Response>((resolve, reject) => {
+        const signal = (init as RequestInit).signal
+        const timeout = setTimeout(() => {
+          resolve(index === 0
+            ? new Response(JSON.stringify({ error: { message: 'temporary failure' } }), {
+                status: 500,
+                statusText: 'Server Error'
+              })
+            : imageResponse())
+        }, index === 0 ? 25_000 : 10_000)
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timeout)
+          reject(new DOMException('Aborted', 'AbortError'))
+        }, { once: true })
+      })
+    }) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          updateRunRetryAttempt,
+          updateRunRetryFailure,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const resultPromise = imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        maxRetries: 1,
+        generationTimeoutSeconds: 30
+      })
+
+      await vi.advanceTimersByTimeAsync(25_000)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(updateRunRetryFailure).toHaveBeenCalledWith(run.id, 0, expect.objectContaining({
+        errorMessage: 'temporary failure'
+      }))
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      const result = await resultPromise
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      expect(updateRunRetryAttempt).toHaveBeenCalledWith(run.id, 0, 1)
+      expect(result.items[0]?.status).toBe('succeeded')
+      expect(insertHistory).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'succeeded',
+        retryAttempt: 1
+      }))
     } finally {
       globalThis.fetch = originalFetch
       vi.useRealTimers()
@@ -591,6 +800,7 @@ describe('image service progress', () => {
   it('persists failed requests with their original request index', async () => {
     const originalFetch = globalThis.fetch
     const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryFailure = vi.fn()
     const run = {
       id: 'run-1',
       conversationId: 'c1',
@@ -600,6 +810,9 @@ describe('image service progress', () => {
       size: '1024x1024',
       quality: 'auto',
       n: 1,
+      maxRetries: 0,
+      retryAttempts: {},
+      retryFailures: {},
       status: 'running',
       durationMs: null,
       errorMessage: null,
@@ -621,6 +834,7 @@ describe('image service progress', () => {
           getConversation: () => ({ autoSaveHistory: true }),
           insertRun: () => run,
           insertHistory,
+          updateRunRetryFailure,
           updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
           imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
         } as never,
@@ -643,6 +857,84 @@ describe('image service progress', () => {
       expect(insertHistory).toHaveBeenCalledTimes(1)
       expect(insertHistory.mock.calls[0][0].requestIndex).toBe(0)
       expect(insertHistory.mock.calls[0][0].durationMs).toBeGreaterThanOrEqual(0)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('retries a failed request in the same slot and records the retry attempt on success', async () => {
+    const originalFetch = globalThis.fetch
+    const insertHistory = vi.fn((input) => ({ ...input, favorite: false }))
+    const updateRunRetryAttempt = vi.fn()
+    const updateRunRetryFailure = vi.fn()
+    const run = {
+      id: 'run-1',
+      conversationId: 'c1',
+      prompt: 'prompt',
+      model: 'gpt-image-2',
+      ratio: '1:1',
+      size: '1024x1024',
+      quality: 'auto',
+      n: 1,
+      maxRetries: 2,
+      retryAttempts: {},
+      retryFailures: {},
+      status: 'running',
+      durationMs: null,
+      errorMessage: null,
+      errorDetails: null,
+      createdAt: new Date().toISOString(),
+      items: []
+    }
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'temporary failure' } }), {
+        status: 500,
+        statusText: 'Server Error'
+      }))
+      .mockResolvedValueOnce(imageResponse()) as unknown as typeof fetch
+
+    try {
+      const imageService = new ImageService(
+        {
+          getConversation: () => ({ autoSaveHistory: true }),
+          insertRun: () => run,
+          updateRunRetryAttempt,
+          updateRunRetryFailure,
+          insertHistory,
+          updateRun: vi.fn((_id, input) => ({ ...run, ...input, items: [] })),
+          imagesDir: mkdtempSync(join(tmpdir(), 'pixai-progress-test-'))
+        } as never,
+        {
+          getPublicSettings: () => ({ baseURL: 'https://example.test', defaultModel: 'gpt-image-2' }),
+          getApiKey: () => 'sk-test'
+        } as never
+      )
+
+      const result = await imageService.generate({
+        conversationId: 'c1',
+        prompt: 'prompt',
+        model: 'gpt-image-2',
+        ratio: '1:1',
+        size: '1024x1024',
+        quality: 'auto',
+        n: 1,
+        maxRetries: 2
+      })
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      expect(updateRunRetryAttempt).toHaveBeenCalledWith(run.id, 0, 1)
+      expect(updateRunRetryFailure).toHaveBeenCalledWith(run.id, 0, expect.objectContaining({
+        errorMessage: 'temporary failure'
+      }))
+      expect(insertHistory).toHaveBeenCalledTimes(1)
+      expect(insertHistory.mock.calls[0][0]).toMatchObject({
+        requestIndex: 0,
+        status: 'succeeded',
+        retryAttempt: 1
+      })
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]?.retryAttempt).toBe(1)
     } finally {
       globalThis.fetch = originalFetch
     }

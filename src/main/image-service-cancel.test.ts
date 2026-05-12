@@ -15,6 +15,41 @@ function neverEndingEventStreamResponse(): Response {
   })
 }
 
+function deferredResponse(): {
+  promise: Promise<Response>
+  resolve: (value: Response) => void
+} {
+  let resolve!: (value: Response) => void
+  const promise = new Promise<Response>((innerResolve) => {
+    resolve = innerResolve
+  })
+  return { promise, resolve }
+}
+
+function imageResponse(): Response {
+  return new Response(JSON.stringify({
+    data: [{ b64_json: Buffer.from('image').toString('base64') }]
+  }), { status: 200 })
+}
+
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitForExpect(expectation: () => void, attempts = 20): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      expectation()
+      return
+    } catch (error) {
+      lastError = error
+      await nextTask()
+    }
+  }
+  throw lastError
+}
+
 describe('image service cancellation', () => {
   it('aborts a single active request when no request index is provided', async () => {
     const abortSpy = vi.fn()
@@ -143,6 +178,7 @@ describe('image service cancellation', () => {
   it('skips the canceled item and keeps the other generated images when canceling a single request', async () => {
     const originalFetch = globalThis.fetch
     const historyItems: Array<Record<string, unknown>> = []
+    const responses = [deferredResponse(), deferredResponse(), deferredResponse()]
     const run = {
       id: 'run-1',
       conversationId: 'c1',
@@ -159,11 +195,16 @@ describe('image service cancellation', () => {
       createdAt: new Date().toISOString(),
       items: []
     }
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({
-        data: [{ b64_json: Buffer.from('image').toString('base64') }]
-      }), { status: 200 }))
-    ) as typeof fetch
+    let fetchIndex = 0
+    globalThis.fetch = vi.fn((_url, init) => {
+      const index = fetchIndex
+      fetchIndex += 1
+      return new Promise<Response>((resolve, reject) => {
+        const signal = (init as RequestInit).signal
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        responses[index].promise.then(resolve, reject)
+      })
+    }) as typeof fetch
 
     try {
       const imageService = new ImageService(
@@ -195,16 +236,20 @@ describe('image service cancellation', () => {
         quality: 'auto',
         n: 3
       })
-      await Promise.resolve()
+      await waitForExpect(() => {
+        expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+      })
 
       imageService.cancelRunGeneration(run.id, 1)
+      responses[0].resolve(imageResponse())
+      responses[2].resolve(imageResponse())
       const result = await resultPromise
 
       expect(result.items).toHaveLength(2)
       expect(result.items.map((item) => item.status)).toEqual(['succeeded', 'succeeded'])
-      expect(result.items.map((item) => item.requestIndex)).toEqual([0, 2])
+      expect(result.items.map((item) => item.requestIndex).sort()).toEqual([0, 2])
       expect(historyItems).toHaveLength(2)
-      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3)
       expect(result.canceled).toBe(false)
     } finally {
       globalThis.fetch = originalFetch

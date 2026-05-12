@@ -10,6 +10,9 @@ import type {
 
 export const DEFAULT_MODEL = 'gpt-image-2'
 export const DEFAULT_IMAGE_OUTPUT_FORMAT: ImageOutputFormat = 'png'
+export const DEFAULT_IMAGE_MAX_RETRIES = 0
+export const DEFAULT_IMAGE_GENERATION_TIMEOUT_SECONDS = 300
+export const MAX_IMAGE_MAX_RETRIES = 10
 export const IMAGE_RATIOS: ImageRatio[] = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21']
 export const IMAGE_QUALITIES: GenerateImageInput['quality'][] = ['auto', 'low', 'medium', 'high']
 export const IMAGE_OUTPUT_FORMATS: ImageOutputFormat[] = ['jpeg', 'png', 'webp']
@@ -140,6 +143,11 @@ export function ratioToSize(ratio: ImageRatio): string {
 
 export function formatImageQuality(quality: ImageQuality): string {
   return IMAGE_QUALITY_LABELS[quality] || quality
+}
+
+export function normalizeImageGenerationTimeoutSeconds(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_IMAGE_GENERATION_TIMEOUT_SECONDS
+  return Math.max(1, Math.trunc(value))
 }
 
 export function formatImageSize(size: string): string {

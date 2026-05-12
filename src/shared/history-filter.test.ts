@@ -16,6 +16,7 @@ const baseItem = {
   status: 'succeeded' as const,
   errorMessage: null,
   errorDetails: null,
+  retryAttempt: 0,
   generationMode: 'text-to-image' as const,
   referenceImages: []
 } satisfies Omit<ImageHistoryItem, 'id' | 'prompt' | 'favorite' | 'createdAt'>

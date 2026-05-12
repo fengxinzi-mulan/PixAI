@@ -9,6 +9,7 @@ export type InterruptedRunFailureItem = {
   durationMs: number
   errorMessage: string
   errorDetails: string
+  retryAttempt: number
   createdAt: string
 }
 
@@ -43,6 +44,7 @@ export function createInterruptedRunRecoveryPlan(run: GenerationRun, now = new D
         durationMs,
         errorMessage: interruptedRunErrorMessage,
         errorDetails,
+        retryAttempt: run.retryAttempts[requestIndex] || 0,
         createdAt: now.toISOString()
       }))
     }

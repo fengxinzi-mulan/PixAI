@@ -3,6 +3,7 @@ import { Check, Copy, Download, Heart, RotateCcw, SquarePen, Trash2 } from 'luci
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
 import { PreviewModal } from '@renderer/components/preview/PreviewModal'
+import { shouldShowFailedImageRetryChip } from '@renderer/generation-retry-display'
 import { ErrorDetailsModal } from './ErrorDetailsModal'
 
 export function ImageTile({
@@ -35,6 +36,7 @@ export function ImageTile({
   const tileStyle = useMemo<CSSProperties | undefined>(() => (
     lockAspectRatio && lockedHeight != null ? { height: `${lockedHeight}px` } : undefined
   ), [lockAspectRatio, lockedHeight])
+  const showFailedRetryChip = shouldShowFailedImageRetryChip(item.retryAttempt)
   const selectionControl = selectable ? (
     <button
       type="button"
@@ -99,6 +101,7 @@ export function ImageTile({
         </div>
         <div className="fail-content">
           <strong>{item.errorMessage || '生成失败'}</strong>
+          {showFailedRetryChip ? <span className="retry-chip">{`重试第 ${item.retryAttempt} 次`}</span> : null}
         </div>
         {errorDetailsOpen ? <ErrorDetailsModal item={item} onClose={() => setErrorDetailsOpen(false)} /> : null}
       </article>

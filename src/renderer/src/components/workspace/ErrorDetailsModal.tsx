@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type JSX } from 'react'
+import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import type { ImageHistoryItem } from '@shared/types'
 import { useAppStore } from '@renderer/store/app-store'
@@ -41,7 +42,7 @@ export function ErrorDetailsModal({
     }
   }
 
-  return (
+  return createPortal(
     <div
       className="modal open"
       onClick={(event) => event.stopPropagation()}
@@ -72,7 +73,8 @@ export function ErrorDetailsModal({
           <ErrorSection title="原始错误详情" value={payload ?? copyText} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

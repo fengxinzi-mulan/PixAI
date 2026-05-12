@@ -2,12 +2,21 @@ import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSyn
 import { basename, extname, join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
-import { DEFAULT_IMAGE_OUTPUT_FORMAT, DEFAULT_MODEL, getDefaultImageSize } from '@shared/image-options'
+import {
+  DEFAULT_IMAGE_GENERATION_TIMEOUT_SECONDS,
+  DEFAULT_IMAGE_MAX_RETRIES,
+  DEFAULT_IMAGE_OUTPUT_FORMAT,
+  DEFAULT_MODEL,
+  MAX_IMAGE_MAX_RETRIES,
+  getDefaultImageSize,
+  normalizeImageGenerationTimeoutSeconds
+} from '@shared/image-options'
 import type {
   ConversationCreateInput,
   Conversation,
   ConversationUpdate,
   GenerationRun,
+  GenerationRunRetryFailure,
   GenerationRunStatus,
   HistoryListOptions,
   ImageHistoryItem,
@@ -77,6 +86,8 @@ export class AppDatabase {
       stream: input.stream || false,
       partialImages: input.partialImages ?? 0,
       inputFidelity: input.inputFidelity ?? null,
+      maxRetries: normalizeRetryCount(input.maxRetries),
+      generationTimeoutSeconds: normalizeImageGenerationTimeoutSeconds(input.generationTimeoutSeconds),
       autoSaveHistory: input.autoSaveHistory ?? true,
       keepFailureDetails: input.keepFailureDetails ?? true,
       referenceImages: [],
@@ -86,8 +97,8 @@ export class AppDatabase {
     this.db
       .prepare(
         `insert into conversations
-        (id, title, draft_prompt, model, ratio, size, quality, n, output_format, output_compression, background, moderation, stream, partial_images, input_fidelity, auto_save_history, keep_failure_details, created_at, updated_at)
-        values (@id, @title, @draftPrompt, @model, @ratio, @size, @quality, @n, @outputFormat, @outputCompression, @background, @moderation, @stream, @partialImages, @inputFidelity, @autoSaveHistory, @keepFailureDetails, @createdAt, @updatedAt)`
+        (id, title, draft_prompt, model, ratio, size, quality, n, output_format, output_compression, background, moderation, stream, partial_images, input_fidelity, max_retries, generation_timeout_seconds, auto_save_history, keep_failure_details, created_at, updated_at)
+        values (@id, @title, @draftPrompt, @model, @ratio, @size, @quality, @n, @outputFormat, @outputCompression, @background, @moderation, @stream, @partialImages, @inputFidelity, @maxRetries, @generationTimeoutSeconds, @autoSaveHistory, @keepFailureDetails, @createdAt, @updatedAt)`
       )
       .run({
         ...conversation,
@@ -114,6 +125,11 @@ export class AppDatabase {
       stream: input.stream !== undefined ? input.stream : current.stream,
       partialImages: input.partialImages !== undefined ? input.partialImages : current.partialImages,
       inputFidelity: input.inputFidelity !== undefined ? input.inputFidelity : current.inputFidelity,
+      maxRetries: input.maxRetries !== undefined ? normalizeRetryCount(input.maxRetries) : current.maxRetries,
+      generationTimeoutSeconds:
+        input.generationTimeoutSeconds !== undefined
+          ? normalizeImageGenerationTimeoutSeconds(input.generationTimeoutSeconds)
+          : current.generationTimeoutSeconds,
       updatedAt: new Date().toISOString()
     }
     this.db
@@ -133,6 +149,8 @@ export class AppDatabase {
         stream = @stream,
         partial_images = @partialImages,
         input_fidelity = @inputFidelity,
+        max_retries = @maxRetries,
+        generation_timeout_seconds = @generationTimeoutSeconds,
         auto_save_history = @autoSaveHistory,
         keep_failure_details = @keepFailureDetails,
         updated_at = @updatedAt
@@ -157,11 +175,24 @@ export class AppDatabase {
     this.db
       .prepare(
         `insert into generation_runs
-        (id, conversation_id, prompt, model, ratio, size, quality, duration_ms, n, status, error_message, error_details, generation_mode, created_at)
-        values (@id, @conversationId, @prompt, @model, @ratio, @size, @quality, @durationMs, @n, @status, @errorMessage, @errorDetails, @generationMode, @createdAt)`
+        (id, conversation_id, prompt, model, ratio, size, quality, duration_ms, n, status, error_message, error_details, max_retries, retry_attempts, retry_failures, generation_mode, created_at)
+        values (@id, @conversationId, @prompt, @model, @ratio, @size, @quality, @durationMs, @n, @status, @errorMessage, @errorDetails, @maxRetries, @retryAttempts, @retryFailures, @generationMode, @createdAt)`
       )
-      .run({ ...input, generationMode: input.generationMode || 'text-to-image' })
-    return { ...input, referenceImages: input.referenceImages || [], items: [] }
+      .run({
+        ...input,
+        maxRetries: normalizeRetryCount(input.maxRetries),
+        retryAttempts: JSON.stringify(input.retryAttempts || {}),
+        retryFailures: JSON.stringify(input.retryFailures || {}),
+        generationMode: input.generationMode || 'text-to-image'
+      })
+    return {
+      ...input,
+      maxRetries: normalizeRetryCount(input.maxRetries),
+      retryAttempts: input.retryAttempts || {},
+      retryFailures: input.retryFailures || {},
+      referenceImages: input.referenceImages || [],
+      items: []
+    }
   }
 
   updateRun(id: string, input: Partial<Pick<GenerationRun, 'status' | 'errorMessage' | 'errorDetails' | 'durationMs'>>): GenerationRun {
@@ -172,6 +203,32 @@ export class AppDatabase {
       .prepare('update generation_runs set status = ?, error_message = ?, error_details = ?, duration_ms = ? where id = ?')
       .run(next.status, next.errorMessage, next.errorDetails, next.durationMs, id)
     return this.getRun(id) || next
+  }
+
+  updateRunRetryAttempt(runId: string, requestIndex: number, retryAttempt: number): GenerationRun {
+    const current = this.getRun(runId)
+    if (!current) throw new Error('Generation run not found.')
+    const retryAttempts = {
+      ...current.retryAttempts,
+      [requestIndex]: Math.max(0, Math.trunc(retryAttempt))
+    }
+    this.db
+      .prepare('update generation_runs set retry_attempts = ? where id = ?')
+      .run(JSON.stringify(retryAttempts), runId)
+    return this.getRun(runId) || { ...current, retryAttempts }
+  }
+
+  updateRunRetryFailure(runId: string, requestIndex: number, failure: GenerationRunRetryFailure): GenerationRun {
+    const current = this.getRun(runId)
+    if (!current) throw new Error('Generation run not found.')
+    const retryFailures = {
+      ...current.retryFailures,
+      [requestIndex]: failure
+    }
+    this.db
+      .prepare('update generation_runs set retry_failures = ? where id = ?')
+      .run(JSON.stringify(retryFailures), runId)
+    return this.getRun(runId) || { ...current, retryFailures }
   }
 
   recoverInterruptedRuns(now = new Date()): number {
@@ -210,10 +267,16 @@ export class AppDatabase {
     this.db
       .prepare(
         `insert into image_history
-        (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, favorite, global_visible, generation_mode, created_at)
-        values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @favorite, @globalVisible, @generationMode, @createdAt)`
+        (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, retry_attempt, favorite, global_visible, generation_mode, created_at)
+        values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @retryAttempt, @favorite, @globalVisible, @generationMode, @createdAt)`
       )
-      .run({ ...item, favorite: item.favorite ? 1 : 0, globalVisible: input.globalVisible === false ? 0 : 1, generationMode: input.generationMode || 'text-to-image' })
+      .run({
+        ...item,
+        retryAttempt: Math.max(0, Math.trunc(item.retryAttempt || 0)),
+        favorite: item.favorite ? 1 : 0,
+        globalVisible: input.globalVisible === false ? 0 : 1,
+        generationMode: input.generationMode || 'text-to-image'
+      })
     return item
   }
 
@@ -390,6 +453,8 @@ export class AppDatabase {
         stream integer not null default 0,
         partial_images integer not null default 0,
         input_fidelity text,
+        max_retries integer not null default 0,
+        generation_timeout_seconds integer not null default 300,
         auto_save_history integer not null,
         keep_failure_details integer not null,
         created_at text not null,
@@ -410,6 +475,9 @@ export class AppDatabase {
         status text not null,
         error_message text,
         error_details text,
+        max_retries integer not null default 0,
+        retry_attempts text not null default '{}',
+        retry_failures text not null default '{}',
         generation_mode text not null default 'text-to-image',
         created_at text not null
       );
@@ -429,6 +497,7 @@ export class AppDatabase {
         status text not null,
         error_message text,
         error_details text,
+        retry_attempt integer not null default 0,
         favorite integer not null default 0,
         global_visible integer not null default 1,
         generation_mode text not null default 'text-to-image',
@@ -489,6 +558,12 @@ export class AppDatabase {
     if (!conversationColumns.some((column) => column.name === 'input_fidelity')) {
       this.db.exec('alter table conversations add column input_fidelity text')
     }
+    if (!conversationColumns.some((column) => column.name === 'max_retries')) {
+      this.db.exec('alter table conversations add column max_retries integer not null default 0')
+    }
+    if (!conversationColumns.some((column) => column.name === 'generation_timeout_seconds')) {
+      this.db.exec('alter table conversations add column generation_timeout_seconds integer not null default 300')
+    }
     const columns = this.db.prepare('pragma table_info(image_history)').all() as Array<{ name: string }>
     if (!columns.some((column) => column.name === 'global_visible')) {
       this.db.exec('alter table image_history add column global_visible integer not null default 1')
@@ -505,12 +580,24 @@ export class AppDatabase {
     if (!columns.some((column) => column.name === 'generation_mode')) {
       this.db.exec("alter table image_history add column generation_mode text not null default 'text-to-image'")
     }
+    if (!columns.some((column) => column.name === 'retry_attempt')) {
+      this.db.exec('alter table image_history add column retry_attempt integer not null default 0')
+    }
     const runColumns = this.db.prepare('pragma table_info(generation_runs)').all() as Array<{ name: string }>
     if (!runColumns.some((column) => column.name === 'duration_ms')) {
       this.db.exec('alter table generation_runs add column duration_ms integer')
     }
     if (!runColumns.some((column) => column.name === 'generation_mode')) {
       this.db.exec("alter table generation_runs add column generation_mode text not null default 'text-to-image'")
+    }
+    if (!runColumns.some((column) => column.name === 'max_retries')) {
+      this.db.exec('alter table generation_runs add column max_retries integer not null default 0')
+    }
+    if (!runColumns.some((column) => column.name === 'retry_attempts')) {
+      this.db.exec("alter table generation_runs add column retry_attempts text not null default '{}'")
+    }
+    if (!runColumns.some((column) => column.name === 'retry_failures')) {
+      this.db.exec("alter table generation_runs add column retry_failures text not null default '{}'")
     }
   }
 
@@ -531,6 +618,10 @@ export class AppDatabase {
       stream: Boolean(row.stream),
       partialImages: row.partial_images != null ? Number(row.partial_images) : 0,
       inputFidelity: row.input_fidelity === 'high' || row.input_fidelity === 'low' ? row.input_fidelity : null,
+      maxRetries: normalizeRetryCount(row.max_retries != null ? Number(row.max_retries) : DEFAULT_IMAGE_MAX_RETRIES),
+      generationTimeoutSeconds: normalizeImageGenerationTimeoutSeconds(
+        row.generation_timeout_seconds != null ? Number(row.generation_timeout_seconds) : DEFAULT_IMAGE_GENERATION_TIMEOUT_SECONDS
+      ),
       autoSaveHistory: Boolean(row.auto_save_history),
       keepFailureDetails: Boolean(row.keep_failure_details),
       referenceImages: this.listConversationReferences(String(row.id)),
@@ -552,6 +643,9 @@ export class AppDatabase {
     status: row.status as GenerationRunStatus,
     errorMessage: row.error_message ? String(row.error_message) : null,
     errorDetails: row.error_details ? String(row.error_details) : null,
+    maxRetries: normalizeRetryCount(row.max_retries != null ? Number(row.max_retries) : DEFAULT_IMAGE_MAX_RETRIES),
+    retryAttempts: parseRetryAttempts(row.retry_attempts),
+    retryFailures: parseRetryFailures(row.retry_failures),
     generationMode: row.generation_mode === 'image-to-image' ? 'image-to-image' : 'text-to-image',
     referenceImages: this.listRunReferences(String(row.id)),
     createdAt: String(row.created_at),
@@ -580,8 +674,8 @@ export class AppDatabase {
         this.db
           .prepare(
             `insert into image_history
-            (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, favorite, global_visible, generation_mode, created_at)
-            values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @favorite, @globalVisible, @generationMode, @createdAt)`
+            (id, conversation_id, run_id, prompt, model, ratio, size, quality, request_index, duration_ms, file_path, file_size_bytes, status, error_message, error_details, retry_attempt, favorite, global_visible, generation_mode, created_at)
+            values (@id, @conversationId, @runId, @prompt, @model, @ratio, @size, @quality, @requestIndex, @durationMs, @filePath, @fileSizeBytes, @status, @errorMessage, @errorDetails, @retryAttempt, @favorite, @globalVisible, @generationMode, @createdAt)`
           )
           .run({
             id: randomUUID(),
@@ -599,6 +693,7 @@ export class AppDatabase {
             status: 'failed',
             errorMessage: failedItem.errorMessage,
             errorDetails: failedItem.errorDetails,
+            retryAttempt: failedItem.retryAttempt,
             favorite: 0,
             globalVisible: this.getConversation(run.conversationId)?.autoSaveHistory !== false ? 1 : 0,
             generationMode: run.generationMode,
@@ -631,6 +726,7 @@ export class AppDatabase {
     status: row.status as ImageStatus,
     errorMessage: row.error_message ? String(row.error_message) : null,
     errorDetails: row.error_details ? String(row.error_details) : null,
+    retryAttempt: row.retry_attempt != null ? Math.max(0, Number(row.retry_attempt)) : 0,
     favorite: Boolean(row.favorite),
     generationMode: row.generation_mode === 'image-to-image' ? 'image-to-image' : 'text-to-image',
     referenceImages: row.run_id ? this.listRunReferences(String(row.run_id)) : [],
@@ -740,4 +836,58 @@ function mimeTypeFromExtension(extension: string): string {
   if (normalized === '.jpg' || normalized === '.jpeg') return 'image/jpeg'
   if (normalized === '.webp') return 'image/webp'
   return 'image/png'
+}
+
+function normalizeRetryCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_IMAGE_MAX_RETRIES
+  return Math.min(MAX_IMAGE_MAX_RETRIES, Math.max(0, Math.trunc(value)))
+}
+
+function parseRetryAttempts(value: unknown): Record<number, number> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, attempt]) => [Number(key), attempt])
+        .filter(([key, attempt]) => Number.isInteger(key) && typeof attempt === 'number' && Number.isFinite(attempt))
+        .map(([key, attempt]) => [key, Math.max(0, Math.trunc(attempt as number))])
+    ) as Record<number, number>
+  } catch {
+    return {}
+  }
+}
+
+function parseRetryFailures(value: unknown): Record<number, GenerationRunRetryFailure> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, failure]) => [Number(key), failure] as const)
+        .filter(([key, failure]) => Number.isInteger(key) && isRetryFailureRecord(failure))
+        .map(([key, failure]) => {
+          const typedFailure = failure as GenerationRunRetryFailure
+          return [
+          key,
+          {
+            errorMessage: typedFailure.errorMessage,
+            errorDetails: typedFailure.errorDetails,
+            createdAt: typedFailure.createdAt
+          }
+          ] as const
+        })
+    ) as Record<number, GenerationRunRetryFailure>
+  } catch {
+    return {}
+  }
+}
+
+function isRetryFailureRecord(value: unknown): value is GenerationRunRetryFailure {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && typeof (value as Record<string, unknown>).errorMessage === 'string'
+    && typeof (value as Record<string, unknown>).errorDetails === 'string'
+    && typeof (value as Record<string, unknown>).createdAt === 'string'
 }

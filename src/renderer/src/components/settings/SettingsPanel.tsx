@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from 'react'
 import { CircleHelp, Settings } from 'lucide-react'
 import {
   DEFAULT_IMAGE_OUTPUT_FORMAT,
+  MAX_IMAGE_MAX_RETRIES,
   IMAGE_BACKGROUNDS,
   IMAGE_INPUT_FIDELITIES,
   IMAGE_MODERATIONS,
@@ -160,6 +161,18 @@ export function SettingsPanel(): JSX.Element {
               onChange={(event) => void updateActiveConversation({ n: Number(event.target.value) })}
             />
           </label>
+          <label className="field">
+            <span>失败重试次数</span>
+            <input
+              className="input-control"
+              type="number"
+              min={0}
+              max={MAX_IMAGE_MAX_RETRIES}
+              step={1}
+              value={conversation.maxRetries}
+              onChange={(event) => void updateActiveConversation({ maxRetries: Number(event.target.value) })}
+            />
+          </label>
           <details className="advanced-settings">
             <summary>
               <span>高级设置</span>
@@ -172,6 +185,32 @@ export function SettingsPanel(): JSX.Element {
                 checked={conversation.stream}
                 onChange={() => void updateActiveConversation({ stream: !conversation.stream })}
               />
+              <label className="field">
+                <span className="field-label-with-help">
+                  <span>超时时间(秒)</span>
+                  <button
+                    type="button"
+                    className="info-icon"
+                    title="单张图片的最大等待时间；每次重试都会重新计时。"
+                    aria-label="超时时间说明"
+                  >
+                    <CircleHelp size={14} />
+                  </button>
+                </span>
+                <input
+                  className="input-control"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={conversation.generationTimeoutSeconds}
+                  onChange={(event) => {
+                    const value = event.target.value.trim()
+                    void updateActiveConversation({
+                      generationTimeoutSeconds: value ? Number(value) : conversation.generationTimeoutSeconds
+                    })
+                  }}
+                />
+              </label>
               <label className="field">
                 <span className="field-label-with-help">
                   <span>输出格式</span>

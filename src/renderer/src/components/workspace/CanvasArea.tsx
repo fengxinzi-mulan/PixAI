@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type JSX } from 'react'
 import { Image as ImageIcon, Trash2 } from 'lucide-react'
 import { elapsedMs, formatDuration } from '@shared/duration'
 import type { GenerationRun, ImageHistoryItem } from '@shared/types'
+import { getGenerationAttemptStartedAt } from '@renderer/generation-timing'
 import { useAppStore } from '@renderer/store/app-store'
 import { GallerySelect, type GallerySelectOption } from '@renderer/components/gallery/GallerySelect'
 import { getWorkspaceRunGridSlots, type WorkspaceRunGridSlot } from '@renderer/workspace-placeholders'
@@ -44,7 +45,7 @@ export function CanvasArea({
     orderedRuns.flatMap((run) => {
       const removedIndexes = run.status === 'running' ? removedGenerationIndexesByRunId[run.id] || [] : []
       const slots = run.status === 'running'
-        ? getWorkspaceRunGridSlots(run.n, run.items, removedIndexes)
+        ? getWorkspaceRunGridSlots(run.n, run.items, removedIndexes, run.retryAttempts)
         : run.items.map((item) => ({ type: 'item' as const, requestIndex: item.requestIndex, item }))
       return slots.map((slot) => ({ run, slot }))
     })
@@ -193,12 +194,17 @@ function renderSlot(
     return <ImageTile key={key} item={slot.item} previewItems={previewItems} />
   }
   const startedAt = Date.parse(run.createdAt)
+  const retryFailure = run.retryFailures?.[slot.requestIndex] ?? null
+  const attemptStartedAt = getGenerationAttemptStartedAt(Number.isFinite(startedAt) ? startedAt : null, retryFailure?.createdAt)
   return (
     <GeneratingTile
       key={key}
       runId={run.id}
       requestIndex={slot.requestIndex}
-      generationElapsedMs={Number.isFinite(startedAt) ? elapsedMs(startedAt, generationClockMs) : null}
+      generationElapsedMs={attemptStartedAt != null ? elapsedMs(attemptStartedAt, generationClockMs) : null}
+      retryAttempt={slot.retryAttempt}
+      maxRetries={run.maxRetries}
+      retryFailure={retryFailure}
     />
   )
 }

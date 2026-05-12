@@ -26,6 +26,7 @@ export function createErrorDetails(
       stream: Boolean(input.stream),
       partialImages: input.partialImages ?? null,
       inputFidelity: input.inputFidelity ?? null,
+      generationTimeoutSeconds: input.generationTimeoutSeconds ?? null,
       referenceImageIds: input.referenceImageIds ?? [],
       promptLength: input.prompt.length,
       promptPreview: input.prompt.slice(0, 300),

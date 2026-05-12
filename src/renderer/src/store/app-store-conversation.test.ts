@@ -46,6 +46,8 @@ describe('app store conversation defaults', () => {
       stream: false,
       partialImages: 0,
       inputFidelity: null,
+      maxRetries: 0,
+      generationTimeoutSeconds: 300,
       autoSaveHistory: true,
       keepFailureDetails: false
     }))
@@ -76,18 +78,85 @@ describe('app store conversation defaults', () => {
       size: '1008x1792'
     })
   })
+
+  it('passes the active conversation retry count into image generation', async () => {
+    const active = createConversation({ id: 'c1', draftPrompt: 'prompt', maxRetries: 3 })
+    const generate = vi.fn(() => Promise.resolve({
+      run: {
+        id: 'run-1',
+        conversationId: active.id,
+        prompt: 'prompt',
+        model: active.model,
+        ratio: active.ratio,
+        size: active.size,
+        quality: active.quality,
+        n: active.n,
+        status: 'succeeded',
+        durationMs: 1000,
+        errorMessage: null,
+        errorDetails: null,
+        maxRetries: 3,
+        retryAttempts: {},
+        retryFailures: {},
+        generationMode: 'text-to-image',
+        referenceImages: [],
+        createdAt: '2026-05-10T00:00:01.000Z',
+        items: []
+      },
+      items: []
+    }))
+    installWindow({
+      update: vi.fn((_id: string, input: Partial<Conversation>) => Promise.resolve({ ...active, ...input })),
+      runs: vi.fn(() => Promise.resolve([])),
+      generate,
+      historyList: vi.fn(() => Promise.resolve([]))
+    })
+    useAppStore.setState({
+      settings: { baseURL: 'https://example.test', apiKeyStored: true, defaultModel: 'gpt-image-2', promptModel: 'gpt-5.4-mini', insecureStorage: false },
+      conversations: [active],
+      activeConversationId: active.id,
+      runsByConversation: { [active.id]: [] },
+      history: [],
+      query: '',
+      sort: 'newest',
+      favoritesOnly: false,
+      toast: null
+    })
+
+    await useAppStore.getState().generate()
+
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: active.id,
+      prompt: 'prompt',
+      maxRetries: 3,
+      generationTimeoutSeconds: 300
+    }))
+  })
 })
 
 function installWindow(conversation: {
   create?: ReturnType<typeof vi.fn>
   update?: ReturnType<typeof vi.fn>
+  runs?: ReturnType<typeof vi.fn>
+  generate?: ReturnType<typeof vi.fn>
+  historyList?: ReturnType<typeof vi.fn>
 }): void {
   Object.defineProperty(globalThis, 'window', {
     value: {
       setTimeout: globalThis.setTimeout,
+      setInterval: globalThis.setInterval,
       clearInterval: globalThis.clearInterval,
       pixai: {
-        conversation
+        conversation: {
+          ...conversation,
+          runs: conversation.runs
+        },
+        image: {
+          generate: conversation.generate
+        },
+        history: {
+          list: conversation.historyList
+        }
       }
     },
     configurable: true
@@ -111,6 +180,8 @@ function createConversation(input: Partial<Conversation> = {}): Conversation {
     stream: false,
     partialImages: 0,
     inputFidelity: null,
+    maxRetries: 0,
+    generationTimeoutSeconds: 300,
     autoSaveHistory: true,
     keepFailureDetails: false,
     referenceImages: [],

@@ -32,6 +32,7 @@ function createHistoryItem(input: Partial<ImageHistoryItem> & Pick<ImageHistoryI
     status: 'succeeded',
     errorMessage: null,
     errorDetails: null,
+    retryAttempt: 0,
     favorite: false,
     generationMode: 'text-to-image',
     referenceImages: [],

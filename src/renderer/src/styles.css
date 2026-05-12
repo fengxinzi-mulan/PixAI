@@ -1046,6 +1046,17 @@ textarea {
   contain: layout paint;
 }
 
+.generating-card.retry-details-card {
+  cursor: pointer;
+}
+
+.generating-center {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  max-width: calc(100% - 28px);
+}
+
 .generating-label {
   color: #245e4c;
   font-size: 13px;
@@ -1053,6 +1064,41 @@ textarea {
 }
 
 .dark .generating-label {
+  color: #b8e9d4;
+}
+
+.retry-failure-message {
+  max-width: 100%;
+  color: #aa3b45;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
+  word-break: break-word;
+}
+
+.dark .retry-failure-message {
+  color: #ffadb4;
+}
+
+.retry-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(24, 125, 93, 0.12);
+  color: #1c6d55;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dark .retry-chip {
+  background: rgba(86, 205, 159, 0.16);
   color: #b8e9d4;
 }
 
@@ -1112,7 +1158,7 @@ textarea {
   width: calc(100% - 34px);
   display: grid;
   place-items: center;
-  gap: 0;
+  gap: 8px;
   padding: 0 10px;
   border: 0;
   border-radius: 0;

@@ -6,8 +6,11 @@ import {
   buildImageEditEndpoint,
   buildImageEndpoint,
   buildImageRequestBody,
+  DEFAULT_IMAGE_MAX_RETRIES,
   DEFAULT_IMAGE_OUTPUT_FORMAT,
+  MAX_IMAGE_MAX_RETRIES,
   getDefaultImageSize,
+  normalizeImageGenerationTimeoutSeconds,
   supportsImageInputFidelity
 } from '@shared/image-options'
 import { elapsedMs } from '@shared/duration'
@@ -36,7 +39,6 @@ type ImageApiResponse = {
 }
 
 const STREAM_IDLE_TIMEOUT_MS = 60_000
-const IMAGE_REQUEST_TIMEOUT_MS = 300_000
 
 type ImageRequestDiagnostics = {
   streamFallback?: {
@@ -83,6 +85,8 @@ export class ImageService {
     const createdAt = new Date().toISOString()
     const referenceImages = this.getGenerationReferences(input)
     const generationMode: GenerationMode = referenceImages.length > 0 ? 'image-to-image' : 'text-to-image'
+    const maxRetries = normalizeRetryCount(input.maxRetries)
+    const generationTimeoutSeconds = normalizeImageGenerationTimeoutSeconds(input.generationTimeoutSeconds)
     const run = this.database.insertRun({
       id: randomUUID(),
       conversationId: input.conversationId,
@@ -96,6 +100,9 @@ export class ImageService {
       status: 'running',
       errorMessage: null,
       errorDetails: null,
+      maxRetries,
+      retryAttempts: {},
+      retryFailures: {},
       generationMode,
       referenceImages,
       createdAt
@@ -122,31 +129,34 @@ export class ImageService {
       let canceledCount = 0
       await runWithConcurrency(
         requestControllers,
-        1,
+        targetCount,
         async ({ controller }, requestIndex) => {
           if (controller.signal.aborted) {
             canceledCount += 1
             return null
           }
 
-          const requestScope = createRequestAbortScope(controller.signal, IMAGE_REQUEST_TIMEOUT_MS)
           try {
-            const requestResult = await this.requestImageBatch(endpoint, apiKey, { ...input, model, n: 1 }, referenceImages, requestScope)
-            const imageData = requestResult.images
-            const image = imageData.at(-1)
-            if (!image) {
-              const durationMs = elapsedMs(startedAtMs)
-              const item = this.createFailureItem(input, run, model, 'The image API returned no images.', 'empty-data', {
-                endpoint,
-                requestIndex,
-                ...requestResult.diagnostics
-              }, new Date().toISOString(), durationMs)
-              items.push(item)
-              return item
+            const generated = await this.generateRequestWithRetries({
+              input,
+              run,
+              model,
+              endpoint,
+              apiKey,
+              referenceImages,
+              requestSignal: controller.signal,
+              requestIndex,
+              maxRetries,
+              generationTimeoutSeconds,
+              startedAtMs
+            })
+            if (!generated.image) {
+              items.push(generated.item)
+              return generated.item
             }
 
             const id = randomUUID()
-            const savedImage = await this.saveImage(id, image, input.outputFormat || DEFAULT_IMAGE_OUTPUT_FORMAT)
+            const savedImage = await this.saveImage(id, generated.image, input.outputFormat || DEFAULT_IMAGE_OUTPUT_FORMAT)
             const durationMs = elapsedMs(startedAtMs)
             succeededCount += 1
             const item = this.database.insertHistory({
@@ -165,6 +175,7 @@ export class ImageService {
               status: 'succeeded',
               errorMessage: null,
               errorDetails: null,
+              retryAttempt: generated.retryAttempt,
               generationMode,
               referenceImages,
               globalVisible,
@@ -179,20 +190,12 @@ export class ImageService {
             }
 
             const durationMs = elapsedMs(startedAtMs)
-            if (requestScope.timedOut()) {
-              const item = this.createFailureItem(input, run, model, 'Image generation timed out after 5 minutes.', 'timeout', {
-                endpoint,
-                requestIndex,
-                timeoutMs: IMAGE_REQUEST_TIMEOUT_MS
-              }, new Date().toISOString(), durationMs)
-              items.push(item)
-              return item
-            }
-
             if (error instanceof ImageHttpError) {
               const item = this.createFailureItem(input, run, model, error.message, 'http', {
                 ...error.details,
-                requestIndex
+                requestIndex,
+                retryAttempt: maxRetries,
+                maxRetries
               }, new Date().toISOString(), durationMs)
               items.push(item)
               return item
@@ -200,12 +203,12 @@ export class ImageService {
 
             const item = this.createFailureItem(input, run, model, error instanceof Error ? error.message : 'Image generation failed.', 'exception', {
               exception: serializeError(error),
-              requestIndex
+              requestIndex,
+              retryAttempt: maxRetries,
+              maxRetries
             }, new Date().toISOString(), durationMs)
             items.push(item)
             return item
-          } finally {
-            requestScope.cleanup()
           }
         }
       )
@@ -214,7 +217,7 @@ export class ImageService {
       const errorMessage = failedCount > 0 && succeededCount === 0
         ? (canceledCount === failedCount ? 'Generation canceled.' : 'Image generation failed.')
         : null
-      const errorDetails = errorMessage ? createErrorDetails({ ...input, model }, canceledCount === failedCount ? 'canceled' : 'batch-failed', {
+      const errorDetails = errorMessage ? createErrorDetails({ ...input, model, generationTimeoutSeconds }, canceledCount === failedCount ? 'canceled' : 'batch-failed', {
         succeededCount,
         failedCount,
         canceledCount
@@ -361,6 +364,161 @@ export class ImageService {
     }
   }
 
+  private async generateRequestWithRetries({
+    input,
+    run,
+    model,
+    endpoint,
+    apiKey,
+    referenceImages,
+    requestSignal,
+    requestIndex,
+    maxRetries,
+    generationTimeoutSeconds,
+    startedAtMs
+  }: {
+    input: GenerateImageInput
+    run: GenerationRun
+    model: string
+    endpoint: string
+    apiKey: string
+    referenceImages: ReferenceImage[]
+    requestSignal: AbortSignal
+    requestIndex: number
+    maxRetries: number
+    generationTimeoutSeconds: number
+    startedAtMs: number
+  }): Promise<
+    | { image: ImageResponseData; retryAttempt: number }
+    | { image: null; item: ImageHistoryItem; retryAttempt: number }
+  > {
+    for (let retryAttempt = 0; retryAttempt <= maxRetries; retryAttempt += 1) {
+      if (requestSignal.aborted) {
+        throw requestSignal.reason || new DOMException('Aborted', 'AbortError')
+      }
+      if (retryAttempt > 0) {
+        this.database.updateRunRetryAttempt(run.id, requestIndex, retryAttempt)
+      }
+
+      const attemptScope = createRequestAbortScope(requestSignal, generationTimeoutSeconds * 1000)
+      try {
+        const attemptedAt = new Date().toISOString()
+        const requestResult = await this.requestImageBatch(
+          endpoint,
+          apiKey,
+          { ...input, model, n: 1, maxRetries },
+          referenceImages,
+          attemptScope
+        )
+        const image = requestResult.images.at(-1)
+        if (image) {
+          return { image, retryAttempt }
+        }
+
+        const retryFailure = {
+          errorMessage: 'The image API returned no images.',
+          errorDetails: createErrorDetails({ ...input, model, generationTimeoutSeconds }, 'empty-data', {
+            endpoint,
+            requestIndex,
+            retryAttempt,
+            maxRetries,
+            ...requestResult.diagnostics
+          }),
+          createdAt: attemptedAt
+        }
+        this.database.updateRunRetryFailure(run.id, requestIndex, retryFailure)
+        if (retryAttempt < maxRetries) continue
+
+        const durationMs = elapsedMs(startedAtMs)
+        const item = this.createFailureItem(input, run, model, retryFailure.errorMessage, 'empty-data', {
+          endpoint,
+          requestIndex,
+          retryAttempt,
+          maxRetries,
+          ...requestResult.diagnostics
+        }, retryFailure.createdAt, durationMs, retryFailure.errorDetails)
+        return { image: null, item, retryAttempt }
+      } catch (error) {
+        if (requestSignal.aborted) {
+          throw error
+        }
+
+        const durationMs = elapsedMs(startedAtMs)
+        if (attemptScope.timedOut()) {
+          const errorMessage = buildGenerationTimeoutMessage(generationTimeoutSeconds)
+          const retryFailure = {
+            errorMessage,
+            errorDetails: createErrorDetails({ ...input, model, generationTimeoutSeconds }, 'timeout', {
+              endpoint,
+              requestIndex,
+              retryAttempt,
+              maxRetries,
+              timeoutMs: generationTimeoutSeconds * 1000
+            }),
+            createdAt: new Date().toISOString()
+          }
+          this.database.updateRunRetryFailure(run.id, requestIndex, retryFailure)
+          if (retryAttempt < maxRetries) continue
+          const item = this.createFailureItem(input, run, model, retryFailure.errorMessage, 'timeout', {
+            endpoint,
+            requestIndex,
+            retryAttempt,
+            maxRetries,
+            timeoutMs: generationTimeoutSeconds * 1000
+          }, retryFailure.createdAt, durationMs, retryFailure.errorDetails)
+          return { image: null, item, retryAttempt }
+        }
+
+        if (error instanceof ImageHttpError) {
+          const retryFailure = {
+            errorMessage: error.message,
+            errorDetails: createErrorDetails({ ...input, model, generationTimeoutSeconds }, 'http', {
+              ...error.details,
+              requestIndex,
+              retryAttempt,
+              maxRetries
+            }),
+            createdAt: new Date().toISOString()
+          }
+          this.database.updateRunRetryFailure(run.id, requestIndex, retryFailure)
+          if (retryAttempt < maxRetries) continue
+          const item = this.createFailureItem(input, run, model, retryFailure.errorMessage, 'http', {
+            ...error.details,
+            requestIndex,
+            retryAttempt,
+            maxRetries
+          }, retryFailure.createdAt, durationMs, retryFailure.errorDetails)
+          return { image: null, item, retryAttempt }
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Image generation failed.'
+        const retryFailure = {
+          errorMessage,
+          errorDetails: createErrorDetails({ ...input, model, generationTimeoutSeconds }, 'exception', {
+            exception: serializeError(error),
+            requestIndex,
+            retryAttempt,
+            maxRetries
+          }),
+          createdAt: new Date().toISOString()
+        }
+        this.database.updateRunRetryFailure(run.id, requestIndex, retryFailure)
+        if (retryAttempt < maxRetries) continue
+        const item = this.createFailureItem(input, run, model, retryFailure.errorMessage, 'exception', {
+          exception: serializeError(error),
+          requestIndex,
+          retryAttempt,
+          maxRetries
+        }, retryFailure.createdAt, durationMs, retryFailure.errorDetails)
+        return { image: null, item, retryAttempt }
+      } finally {
+        attemptScope.cleanup()
+      }
+    }
+
+    throw new Error('Image generation retry loop exited unexpectedly.')
+  }
+
   private async requestImageEditBatch(
     endpoint: string,
     apiKey: string,
@@ -484,6 +642,7 @@ export class ImageService {
       status: 'failed',
       errorMessage,
       errorDetails,
+      retryAttempt: typeof details.retryAttempt === 'number' ? details.retryAttempt : 0,
       generationMode: run.generationMode,
       referenceImages: run.referenceImages,
       globalVisible: this.database.getConversation(input.conversationId)?.autoSaveHistory !== false,
@@ -733,6 +892,15 @@ function disableStreaming(input: GenerateImageInput): GenerateImageInput {
     stream: false,
     partialImages: undefined
   }
+}
+
+function buildGenerationTimeoutMessage(timeoutSeconds: number): string {
+  return `Image generation timed out after ${timeoutSeconds} seconds.`
+}
+
+function normalizeRetryCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_IMAGE_MAX_RETRIES
+  return Math.min(MAX_IMAGE_MAX_RETRIES, Math.max(0, Math.trunc(value)))
 }
 
 function serializeError(error: unknown): Record<string, unknown> {

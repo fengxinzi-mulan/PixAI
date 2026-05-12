@@ -7,6 +7,11 @@ export type ImageInputFidelity = 'low' | 'high'
 export type ImageStatus = 'succeeded' | 'failed'
 export type GenerationRunStatus = 'running' | ImageStatus
 export type GenerationMode = 'text-to-image' | 'image-to-image'
+export type GenerationRunRetryFailure = {
+  errorMessage: string
+  errorDetails: string
+  createdAt: string
+}
 
 export type ReferenceImage = {
   id: string
@@ -39,6 +44,8 @@ export type GenerateImageInput = {
   partialImages?: number
   inputFidelity?: ImageInputFidelity
   referenceImageIds?: string[]
+  maxRetries?: number
+  generationTimeoutSeconds?: number
 }
 
 export type PromptAssistInput = {
@@ -62,6 +69,8 @@ export type Conversation = {
   stream: boolean
   partialImages: number | null
   inputFidelity: ImageInputFidelity | null
+  maxRetries: number
+  generationTimeoutSeconds: number
   autoSaveHistory: boolean
   keepFailureDetails: boolean
   referenceImages: ReferenceImage[]
@@ -86,6 +95,8 @@ export type ConversationUpdate = Partial<
     | 'stream'
     | 'partialImages'
     | 'inputFidelity'
+    | 'maxRetries'
+    | 'generationTimeoutSeconds'
     | 'autoSaveHistory'
     | 'keepFailureDetails'
   >
@@ -106,6 +117,8 @@ export type ConversationCreateInput = Partial<
     | 'stream'
     | 'partialImages'
     | 'inputFidelity'
+    | 'maxRetries'
+    | 'generationTimeoutSeconds'
     | 'autoSaveHistory'
     | 'keepFailureDetails'
   >
@@ -127,6 +140,7 @@ export type ImageHistoryItem = {
   status: ImageStatus
   errorMessage: string | null
   errorDetails: string | null
+  retryAttempt: number
   favorite: boolean
   generationMode: GenerationMode
   referenceImages: ReferenceImage[]
@@ -146,6 +160,9 @@ export type GenerationRun = {
   durationMs: number | null
   errorMessage: string | null
   errorDetails: string | null
+  maxRetries: number
+  retryAttempts: Record<number, number>
+  retryFailures: Record<number, GenerationRunRetryFailure>
   generationMode: GenerationMode
   referenceImages: ReferenceImage[]
   createdAt: string
